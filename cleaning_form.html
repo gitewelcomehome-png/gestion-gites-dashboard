@@ -5,108 +5,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Validation Planning Ménage</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
-        /* Styles simplifiés pour le formulaire */
-        body { font-family: Arial, sans-serif; background: #f4f6f8; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2C3E50; border-bottom: 2px solid #E67E22; padding-bottom: 10px; margin-bottom: 20px; }
-        .task-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
-        .task-header { font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .gite-trevoux { color: #667eea; }
-        .gite-couzon { color: #f093fb; }
-        .actions { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
-        .actions label { font-weight: normal; }
-        .actions input[type="date"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
-        .btn-validate { background: #2ecc71; }
-        .btn-propose { background: #f1c40f; }
-        .btn:hover { opacity: 0.9; }
-        #message { margin-top: 20px; padding: 15px; border-radius: 8px; }
+        body { font-family: Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
+        .gite-task { background-color: #ecf0f1; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 5px solid; }
+        .gite-task.Trevoux { border-left-color: #3498db; }
+        .gite-task.Couzon { border-left-color: #e74c3c; }
+        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .task-info strong { font-size: 1.1em; color: #2c3e50; }
+        .client-info { font-style: italic; color: #7f8c8d; }
+        .task-actions { display: flex; align-items: center; gap: 10px; }
+        .task-actions button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background-color 0.3s; }
+        .btn-ok { background-color: #2ecc71; color: white; }
+        .btn-ok:hover { background-color: #27ae60; }
+        .btn-proposer { background-color: #f39c12; color: white; }
+        .btn-proposer:hover { background-color: #e67e22; }
+        .date-input { padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; width: 120px; text-align: center; }
+        .message-container { text-align: center; padding: 15px; margin-top: 20px; border-radius: 6px; font-weight: bold; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .no-tasks { text-align: center; padding: 30px; color: #7f8c8d; }
     </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="page-title">Validation Planning Ménage</h1>
+        <p>Veuillez valider les dates de ménage proposées ou proposer une date de remplacement.</p>
+        <div id="tasks-container">
+            <div id="no-tasks-message" class="no-tasks" style="display: none;">
+                Aucun ménage n'est prévu pour ce mois ou les données ne sont pas disponibles.
+            </div>
+        </div>
+        <div id="message-area"></div>
+    </div>
 
     <script>
-        const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        // Simule les fonctions utilitaires nécessaires (getCleaningTime, isChainingDay, etc. NON inclus ici par souci de concision. Ils devraient être copiés/collés depuis le fichier principal ou mis dans un fichier utils.js partagé).
+        // ----------------------------------------------------
+        // ÉTAPE 1 : Configuration Supabase (À REMPLACER !)
+        // ----------------------------------------------------
+        const SUPABASE_URL = 'VOTRE_URL_DE_PROJET_ICI'; 
+        const SUPABASE_KEY = 'VOTRE_CLE_ANON_PUBLIQUE_ICI'; 
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const month = urlParams.get('month');
-            if (month) {
-                document.getElementById('form-title').innerText = `Validation Planning Ménage - ${month}`;
-                loadCleaningTasks(month);
-            } else {
-                document.getElementById('tasks-container').innerHTML = "<p>Paramètre 'month' manquant. Lien invalide.</p>";
-            }
-        });
+        // ----------------------------------------------------
+        // Fonctions Utilitaires
+        // ----------------------------------------------------
 
-        async function loadCleaningTasks(month) {
-            // Logique de filtrage par mois similaire à renderCleaning dans le fichier principal
-            // ... (Filtrez les réservations pour ce mois) ...
-            
-            // Simuler le chargement des tâches pour l'exemple
-            const { data: reservations, error } = await supabase
-                .from('reservations')
-                .select('id, gite, nom_client, date_debut, date_fin')
-                .gte('date_fin', `${month}-01`)
-                .lte('date_fin', `${month}-31`); // Simple approximation pour la fin du mois
-
-            if (error) {
-                document.getElementById('tasks-container').innerHTML = `<p style="color:red;">Erreur de chargement : ${error.message}</p>`;
-                return;
-            }
-            
-            let html = '';
-            reservations.sort((a, b) => new Date(a.date_fin) - new Date(b.date_fin));
-
-            reservations.forEach(r => {
-                const finishTime = "12h00"; // Simplification pour le formulaire externe
-                const giteClass = r.gite === 'Trévoux' ? 'gite-trevoux' : 'gite-couzon';
-
-                html += `
-                <div class="task-card" data-res-id="${r.id}">
-                    <div class="task-header">
-                        <span class="${giteClass}"><i class="fas fa-broom"></i> ${r.gite} : ${new Date(r.date_fin).toLocaleDateString('fr-FR')}</span>
-                        <span>Prêt avant : ${finishTime}</span>
-                    </div>
-                    <div style="font-size:0.9rem;">
-                        Séjour : ${new Date(r.date_debut).toLocaleDateString('fr-FR')} ➝ ${new Date(r.date_fin).toLocaleDateString('fr-FR')} (${r.nom_client})
-                    </div>
-                    
-                    <div class="actions">
-                        <button class="btn btn-validate" onclick="submitValidation(${r.id}, '${r.gite}', '${r.date_fin}', 'Validé')">
-                            <i class="fas fa-check"></i> OK
-                        </button>
-                        
-                        <label>Proposer autre date :</label>
-                        <input type="date" id="date-prop-${r.id}">
-                        <button class="btn btn-propose" onclick="submitValidation(${r.id}, '${r.gite}', '${r.date_fin}', 'Proposé')">
-                            <i class="fas fa-calendar-alt"></i> Proposer
-                        </button>
-                    </div>
-                </div>`;
-            });
-
-            document.getElementById('tasks-container').innerHTML = html;
+        // Formatage de date AAAA-MM-JJ vers JJ/MM/AAAA
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const [year, month, day] = dateString.split('-');
+            return `${day}/${month}/${year}`;
         }
 
-        async function submitValidation(resId, gite, originalDate, status) {
-            const dateInput = document.getElementById(`date-prop-${resId}`);
-            let validatedDate = originalDate;
+        // Affiche un message de statut
+        function displayMessage(text, type = 'success') {
+            const area = document.getElementById('message-area');
+            area.innerHTML = `<div class="message-container ${type}">${text}</div>`;
+            setTimeout(() => { area.innerHTML = ''; }, 5000);
+        }
 
-            if (status === 'Proposé' && dateInput.value) {
-                validatedDate = dateInput.value;
-            } else if (status === 'Proposé' && !dateInput.value) {
-                alert("Veuillez saisir une date proposée.");
-                return;
-            }
+        // ----------------------------------------------------
+        // ÉTAPE 2 : Insertion de la Validation (Fonction Critique)
+        // ----------------------------------------------------
 
-            const { data, error } = await supabase
-                .from('cleaning_validation') // !!! Assurez-vous que cette table existe !!!
+        async function submitValidation(resId, gite, originalDate, validatedDate, status) {
+            
+            // L'opération 'upsert' fait soit un INSERT, soit un UPDATE si 'reservation_id' existe déjà.
+            // Le nom des colonnes doit ABSOLUMENT correspondre à votre table 'cleaning_validation'
+            const { error } = await supabase
+                .from('cleaning_validation') 
                 .upsert([
                     { 
                         reservation_id: resId, 
@@ -118,29 +87,147 @@
                 ], { onConflict: 'reservation_id' }); 
             
             if (error) {
-                console.error(error);
-                document.getElementById('message').innerHTML = `<p style="background:#fdd; border:1px solid red;">Erreur de soumission pour la réservation ${resId}.</p>`;
+                console.error("Erreur Supabase lors de l'insertion :", error);
+                displayMessage(`Erreur: La validation a échoué. Cause: ${error.message || 'Problème de connexion/RLS.'}`, 'error');
+                return false;
             } else {
-                const card = document.querySelector(`[data-res-id="${resId}"]`);
-                if (card) {
-                    card.style.opacity = '0.5';
-                    card.style.border = '2px solid #2ecc71';
-                }
-                document.getElementById('message').innerHTML = `<p style="background:#dfd; border:1px solid green;">Tâche pour la réservation ${resId} soumise (Statut: ${status}).</p>`;
+                displayMessage(`Validation enregistrée pour la réservation ID ${resId}. Statut: ${status}.`);
+                return true;
             }
         }
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1 id="form-title">Validation Planning Ménage</h1>
-        <p>Veuillez valider les dates de ménage proposées ou proposer une date de remplacement.</p>
-        
-        <div id="tasks-container">
-            Chargement des tâches de ménage...
-        </div>
 
-        <div id="message"></div>
-    </div>
+
+        // ----------------------------------------------------
+        // ÉTAPE 3 : Rendu et Logique des Boutons
+        // ----------------------------------------------------
+
+        function createActionButton(resId, gite, originalDate, validatedDate, status, buttonText, buttonClass, dateInputId = null) {
+            const button = document.createElement('button');
+            button.className = buttonClass;
+            button.textContent = buttonText;
+            
+            button.onclick = async () => {
+                let finalDate = validatedDate;
+
+                if (dateInputId) {
+                    // Si c'est un bouton "Proposer autre date", on prend la valeur du champ
+                    const input = document.getElementById(dateInputId);
+                    if (input.value) {
+                        finalDate = input.value; // Format AAAA-MM-JJ
+                    } else {
+                        displayMessage('Veuillez sélectionner une date alternative.', 'error');
+                        return;
+                    }
+                }
+                
+                // Lancement de l'insertion
+                const success = await submitValidation(resId, gite, originalDate, finalDate, status);
+                
+                if (success) {
+                    // Masquer la tâche après succès (optionnel)
+                    document.getElementById(`task-${resId}`).style.display = 'none';
+                }
+            };
+            return button;
+        }
+
+        function renderTasks(tasks) {
+            const container = document.getElementById('tasks-container');
+            container.innerHTML = ''; // Nettoyer le conteneur
+
+            if (tasks.length === 0) {
+                document.getElementById('no-tasks-message').style.display = 'block';
+                return;
+            }
+
+            tasks.forEach(task => {
+                const originalDate = task.date_fin; // Date de départ format AAAA-MM-JJ
+                const resId = task.id;
+                const giteName = task.gite;
+                const clientInfo = task.client || 'Client Gîtes de France'; // Assurez-vous d'avoir la colonne 'client' dans 'reservations'
+
+                const taskDiv = document.createElement('div');
+                taskDiv.className = `gite-task ${giteName}`;
+                taskDiv.id = `task-${resId}`;
+
+                const dateInputId = `date-input-${resId}`;
+
+                taskDiv.innerHTML = `
+                    <div class="task-header">
+                        <div class="task-info">
+                            <strong>${giteName} : ${formatDate(originalDate)}</strong>
+                            <div class="client-info">Séjour : ${formatDate(task.date_debut)} → ${formatDate(originalDate)} (🔑 ${clientInfo})</div>
+                        </div>
+                        <div class="prep-info">Prêt avant : 12h00</div>
+                    </div>
+                    <div class="task-actions">
+                        ${createActionButton(resId, giteName, originalDate, originalDate, 'Validé', 'OK', 'btn-ok').outerHTML}
+                        
+                        <span>Proposer autre date :</span>
+                        <input type="date" id="${dateInputId}" class="date-input" />
+                        
+                        ${createActionButton(resId, giteName, originalDate, null, 'Proposé', 'Proposer', 'btn-proposer', dateInputId).outerHTML}
+                    </div>
+                `;
+                container.appendChild(taskDiv);
+            });
+        }
+
+
+        // ----------------------------------------------------
+        // ÉTAPE 4 : Initialisation et Récupération des Données
+        // ----------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const monthParam = urlParams.get('month'); // Format AAAA-MM
+
+            if (monthParam) {
+                document.getElementById('page-title').textContent = `Validation Planning Ménage - ${monthParam}`;
+                fetchCleaningTasks(monthParam);
+            } else {
+                displayMessage('Erreur : Paramètre de mois (month=AAAA-MM) manquant dans l\'URL.', 'error');
+                document.getElementById('no-tasks-message').style.display = 'block';
+            }
+        });
+
+        async function fetchCleaningTasks(month) {
+            const startOfMonth = `${month}-01`;
+            const endOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
+
+            // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
+            const { data: reservations, error: resError } = await supabase
+                .from('reservations')
+                .select('id, date_debut, date_fin, gite, client') 
+                .gte('date_fin', startOfMonth) // greater than or equal
+                .lte('date_fin', endOfMonth)   // less than or equal
+                .order('date_fin', { ascending: true });
+
+            if (resError) {
+                console.error('Erreur Supabase lors du SELECT des réservations :', resError);
+                displayMessage('Erreur de connexion aux réservations.', 'error');
+                return;
+            }
+
+            // 2. Récupérer les validations déjà faites pour ces réservations
+            const reservationIds = reservations.map(r => r.id);
+            const { data: validations, error: valError } = await supabase
+                .from('cleaning_validation')
+                .select('reservation_id')
+                .in('reservation_id', reservationIds);
+
+            if (valError) {
+                console.error('Erreur Supabase lors du SELECT des validations :', valError);
+                // On continue même en cas d'erreur ici, car ce n'est pas critique
+            }
+
+            // 3. Filtrer les réservations pour n'afficher que celles qui n'ont pas encore été validées
+            const validatedIds = new Set(validations ? validations.map(v => v.reservation_id) : []);
+            const pendingTasks = reservations.filter(r => !validatedIds.has(r.id));
+            
+            renderTasks(pendingTasks);
+        }
+
+    </script>
 </body>
 </html>
