@@ -42,14 +42,15 @@
 
     <script>
         // ----------------------------------------------------
-        // ÉTAPE 1 : Configuration Supabase (À REMPLACER !)
+        // ÉTAPE 1 : Configuration Supabase (CORRIGÉ)
         // ----------------------------------------------------
-        // ATTENTION : NE PAS OUBLIER DE REMPLACER VOS CLÉS RÉELLES ET DE RE-UPLOAD SUR VERCEL
+        // REMPLACER LES CLÉS CI-DESSOUS
         const SUPABASE_URL = 'VOTRE_URL_DE_PROJET_ICI'; 
         const SUPABASE_KEY = 'VOTRE_CLE_ANON_PUBLIQUE_ICI'; 
         
-        // Initialisation du client Supabase
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Initialisation du client Supabase (Correction de la ReferenceError)
+        // Utilise window.supabase pour garantir que le client est accessible après le chargement du CDN.
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // ----------------------------------------------------
         // Fonctions Utilitaires
@@ -75,9 +76,7 @@
 
         async function submitValidation(resId, gite, originalDate, validatedDate, status) {
             
-            // L'opération 'upsert' fait soit un INSERT, soit un UPDATE si 'reservation_id' existe déjà.
-            // Le nom des colonnes doit ABSOLUMENT correspondre à votre table 'cleaning_validation'
-            // NOTE : L'opération ne fonctionnera que si 'reservation_id' est UNIQUE dans votre table Supabase!
+            // NOTE : Ceci requiert que 'reservation_id' soit UNIQUE dans votre table 'cleaning_validation'!
             const { error } = await supabase
                 .from('cleaning_validation') 
                 .upsert([
@@ -114,10 +113,9 @@
                 let finalDate = validatedDate;
 
                 if (dateInputId) {
-                    // Si c'est un bouton "Proposer autre date", on prend la valeur du champ
                     const input = document.getElementById(dateInputId);
                     if (input.value) {
-                        finalDate = input.value; // Format AAAA-MM-JJ
+                        finalDate = input.value; 
                     } else {
                         displayMessage('Veuillez sélectionner une date alternative.', 'error');
                         return;
@@ -128,7 +126,7 @@
                 const success = await submitValidation(resId, gite, originalDate, finalDate, status);
                 
                 if (success) {
-                    // Masquer la tâche après succès (optionnel)
+                    // Masquer la tâche après succès
                     document.getElementById(`task-${resId}`).style.display = 'none';
                 }
             };
@@ -137,7 +135,7 @@
 
         function renderTasks(tasks) {
             const container = document.getElementById('tasks-container');
-            container.innerHTML = ''; // Nettoyer le conteneur
+            container.innerHTML = ''; 
 
             if (tasks.length === 0) {
                 document.getElementById('no-tasks-message').style.display = 'block';
@@ -145,10 +143,10 @@
             }
 
             tasks.forEach(task => {
-                const originalDate = task.date_fin; // Date de départ format AAAA-MM-JJ
+                const originalDate = task.date_fin; 
                 const resId = task.id;
                 const giteName = task.gite;
-                const clientInfo = task.client || 'Client Inconnu'; // Assurez-vous d'avoir la colonne 'client' dans 'reservations'
+                const clientInfo = task.client || 'Client Inconnu'; 
 
                 const taskDiv = document.createElement('div');
                 taskDiv.className = `gite-task ${giteName}`;
@@ -197,15 +195,14 @@
 
         async function fetchCleaningTasks(month) {
             const startOfMonth = `${month}-01`;
-            // Calcule la date de fin du mois (ex: 2025-12-31)
             const endOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
 
             // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
             const { data: reservations, error: resError } = await supabase
                 .from('reservations')
                 .select('id, date_debut, date_fin, gite, client') 
-                .gte('date_fin', startOfMonth) // greater than or equal
-                .lte('date_fin', endOfMonth)   // less than or equal
+                .gte('date_fin', startOfMonth)
+                .lte('date_fin', endOfMonth)   
                 .order('date_fin', { ascending: true });
 
             if (resError) {
@@ -223,7 +220,6 @@
 
             if (valError) {
                 console.error('Erreur Supabase lors du SELECT des validations :', valError);
-                // On continue même en cas d'erreur ici, car ce n'est pas critique
             }
 
             // 3. Filtrer les réservations pour n'afficher que celles qui n'ont pas encore été validées
