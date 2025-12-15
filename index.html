@@ -444,9 +444,21 @@
         let profitChartInstance = null;
 
 
-        // --- 2. AUTHENTIFICATION & CHARGEMENT DES DONNÉES ---
-        
-        // Les fonctions de rendu sont déclarées ici pour être disponibles par loadData et showTab
+        // --- 2. FONCTIONS DE SÉQUENCEMENT CRITIQUES (Login/Logout) ---
+        // DÉPLACÉ EN HAUT DE LA BALISE SCRIPT
+        window.handleLogin = async function() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
+            if (error) document.getElementById('login-msg').style.display = 'block';
+            else location.reload();
+        }
+        window.handleLogout = async function() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        // --- 3. RENDU ET LOGIQUE DIVERSES (Déclarées globalement) ---
         
         window.updateDashboard = function() {
             const year = parseInt(document.getElementById('stats-year').value);
@@ -606,7 +618,7 @@
                 if(!weeks[key]) {
                      const startW = getStartOfWeek(d);
                      const endW = new Date(startW); endW.setDate(endW.getDate()+6);
-                     // CORRECTION: Assure que startW et endW sont convertis en chaîne ISO pour formatDate
+                     // Correction: Convertit l'objet Date en chaîne ISO avant de passer à formatDate
                      weeks[key] = { 
                         label: `Semaine ${wNum}`, 
                         dates: `${formatDate(startW.toISOString())} - ${formatDate(endW.toISOString())}`, 
@@ -839,7 +851,7 @@
 
         function formatDate(s) { 
             if(!s) return ''; 
-            // CORRECTION: Convertir l'objet Date en chaîne ISO avant d'utiliser .match()
+            // CORRECTION TypeError: Si 's' est un objet Date, le convertir en chaîne ISO avant d'utiliser .match()
             let dateStr = (s instanceof Date) ? s.toISOString().split('T')[0] : s;
             
             if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
