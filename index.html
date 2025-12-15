@@ -26,7 +26,11 @@
     .tab-content{display:none;}
     .tab-content.active{display:block;}
     .main-grid{display:grid;grid-template-columns:400px 1fr;gap:30px;margin-bottom:30px;}
-    @media (max-width:1200px){.main-grid{grid-template-columns:1fr;}}
+    
+    /* Grid Spécifique pour le ménage */
+    .menage-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 30px;}
+    @media (max-width:1000px){.menage-grid{grid-template-columns:1fr;}}
+
     .card{background:white;border-radius:20px;padding:35px;box-shadow:0 10px 40px rgba(0,0,0,0.15);}
     .card-header{display:flex;align-items:center;gap:15px;margin-bottom:25px;padding-bottom:20px;border-bottom:2px solid var(--border);}
     .card-icon{font-size:2.5rem;}
@@ -41,9 +45,12 @@
     .btn-sync{background:linear-gradient(135deg,#3498DB 0%,#2874A6 100%);color:white;margin-top:10px;}
     .btn-menage{background:linear-gradient(135deg,#27AE60 0%,#229954 100%);color:white;margin-top:10px;}
     .btn-danger{background:linear-gradient(135deg,var(--danger) 0%,#C0392B 100%);color:white;}
+    
     .menage-item{background:#f0f8ff;padding:15px;margin-bottom:10px;border-radius:8px;border-left:4px solid #27AE60; display: flex; justify-content: space-between; align-items: center;}
-    .menage-date{font-weight:700;color:var(--primary);margin-bottom:5px;}
-    .menage-detail{font-size:0.95rem;color:#666;}
+    .menage-col-header {padding: 15px; border-radius: 12px; color: white; margin-bottom: 20px; text-align: center; font-family: 'Playfair Display', serif; font-size: 1.5rem;}
+    .menage-col-header.trevoux {background: linear-gradient(135deg,var(--trevoux) 0%,#667eea 100%);}
+    .menage-col-header.couzon {background: linear-gradient(135deg,var(--couzon) 0%,#f5576c 100%);}
+
     .charge-item{background:var(--bg-light);padding:15px;border-radius:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
     .charge-amount{font-size:1.2rem;font-weight:700;color:var(--danger);}
     .btn-small{padding:8px 15px;font-size:0.9rem;width:auto;}
@@ -172,7 +179,8 @@
             <div class="card">
                 <div class="card-header"><span class="card-icon">🧹</span><h2 class="card-title">Planning Ménage</h2></div>
                 <button class="btn btn-menage" onclick="genererPlanningMenage()"><span>🧹</span> Rafraîchir Planning</button>
-                <div id="menagePlanning" style="margin-top: 30px;"></div>
+                <div id="menagePlanning" style="margin-top: 30px;">
+                    </div>
             </div>
         </div>
         
@@ -283,7 +291,7 @@
             } else {
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('appContainer').style.display = 'block';
-                await loadCleaningValidations(); // Charger les status avant d'afficher
+                await loadCleaningValidations();
                 await updateReservationsList();
                 await updateStats();
                 chargerUrlsIcal();
@@ -310,33 +318,23 @@
             const { data, error } = await supabase.from('reservations').select('*').order('date_debut');
             if(error) { console.error(error); return []; }
             return data.map(r => ({
-                id: r.id, 
-                gite: r.gite, 
-                dateDebut: r.date_debut, 
-                dateFin: r.date_fin, 
-                site: r.plateforme,
-                montant: r.montant, 
-                nom: r.nom_client, 
-                telephone: r.telephone,
+                id: r.id, gite: r.gite, dateDebut: r.date_debut, dateFin: r.date_fin, site: r.plateforme,
+                montant: r.montant, nom: r.nom_client, telephone: r.telephone,
                 nuits: Math.ceil((new Date(r.date_fin)-new Date(r.date_debut))/(1000*60*60*24))
             }));
         }
 
-        // CALCUL LOGIQUE MENAGE (UTILISÉ PARTOUT)
         function getMenageInfo(reservation, allReservations) {
             const departDate = parseLocalDate(reservation.dateFin);
             let menageDate = new Date(departDate);
             let heure = '12h00';
             const departDay = departDate.getDay();
             
-            // Check enchainement (Arrivée le jour même du départ)
             const arriveeMemejour = allReservations.find(resa => 
-                resa.gite === reservation.gite && 
-                resa.id !== reservation.id &&
+                resa.gite === reservation.gite && resa.id !== reservation.id &&
                 parseLocalDate(resa.dateDebut).toDateString() === departDate.toDateString()
             );
 
-            // Logique
             if (departDay === 0) { // Dimanche
                 if (!arriveeMemejour) {
                      menageDate.setDate(menageDate.getDate() + 1); // Report Lundi
@@ -344,16 +342,13 @@
                      if(arriveeLundi) heure = '07h00';
                 } else { heure = '13h00'; }
             } else if (departDay === 6 && !arriveeMemejour) { // Samedi
-                // Vérif dimanche
                 const resaDimanche = allReservations.find(x => x.gite === reservation.gite && parseLocalDate(x.dateDebut).getTime() === (departDate.getTime() + 86400000));
                 if(!resaDimanche) {
                     menageDate.setDate(menageDate.getDate() + 2); // Report Lundi
                     const arriveeLundi = allReservations.find(x => x.gite === reservation.gite && parseLocalDate(x.dateDebut).toDateString() === menageDate.toDateString());
                     if(arriveeLundi) heure = '07h00';
                 }
-            } else if (arriveeMemejour) {
-                heure = '11h00'; // Enchainement semaine
-            }
+            } else if (arriveeMemejour) { heure = '11h00'; }
 
             return {
                 dateObj: menageDate,
@@ -365,7 +360,6 @@
         }
 
         async function updateReservationsList() {
-            // S'assurer que les validations sont chargées
             if(Object.keys(window.DB_VALIDATIONS).length === 0) await loadCleaningValidations();
             
             const resas = await getAllReservations();
@@ -388,7 +382,6 @@
                     <div class="gite-label couzon-label" style="margin: 0; border-radius: 0;">🏠 Couzon</div>
                 </div>`;
 
-            // Sort weeks alphabetically/numerically to avoid disorder
             Object.keys(weeks).sort().forEach(week => {
                 html += `<div class="week-block"><div class="week-header-unique">${week}</div>
                 <div class="week-content-grid">
@@ -405,11 +398,8 @@
         }
 
         function renderResaCard(r, allReservations) {
-            // Get cleaning info
             const menage = getMenageInfo(r, allReservations);
-            // Get validation status
             const status = window.DB_VALIDATIONS[r.id] || 'pending';
-            const statusIcon = status === 'validated' ? '✅' : '⏳';
             const badgeClass = status === 'validated' ? 'validated' : 'pending';
             const btnLabel = status === 'validated' ? 'Validé' : 'À faire';
 
@@ -421,15 +411,9 @@
                 <div style="font-weight:bold;margin-bottom:5px;">${r.nom || 'Client Inconnu'}</div>
                 <div style="font-size:0.9rem;">${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}</div>
                 <div style="font-size:0.8rem;color:#666;margin-bottom:8px;">${r.montant}€ - ${r.site}</div>
-                
                 <div style="border-top:1px solid #ddd; padding-top:8px; margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-size:0.85rem;">
-                        🧹 <strong>${menage.displayDate}</strong> à ${menage.heure}
-                        ${menage.enchainement ? '⚡' : ''}
-                    </div>
-                    <button class="btn-validation ${badgeClass}" style="padding:2px 8px; font-size:0.75rem;" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">
-                        ${btnLabel}
-                    </button>
+                    <div style="font-size:0.85rem;">🧹 <strong>${menage.displayDate}</strong> ${menage.heure} ${menage.enchainement ? '⚡' : ''}</div>
+                    <button class="btn-validation ${badgeClass}" style="padding:2px 8px; font-size:0.75rem;" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">${btnLabel}</button>
                 </div>
             </div>`;
         }
@@ -478,7 +462,6 @@
         
         async function toggleMenageStatus(reservationId, currentStatus, dateIso, gite) {
             const newStatus = currentStatus === 'validated' ? 'pending' : 'validated';
-            
             const { error } = await supabase.from('cleaning_validation').upsert({
                 reservation_id: reservationId,
                 gite: gite,
@@ -488,7 +471,6 @@
 
             if(!error) {
                 window.DB_VALIDATIONS[reservationId] = newStatus;
-                // Update BOTH views
                 updateReservationsList();
                 genererPlanningMenage();
             } else {
@@ -500,23 +482,48 @@
         async function genererPlanningMenage() {
             await loadCleaningValidations();
             const resas = await getAllReservations();
-            const now = new Date();
-            const relevant = resas.filter(r => new Date(r.dateFin) >= new Date(now.getFullYear(), now.getMonth()-1, 1));
+            // Filtre A PARTIR D'AUJOURD'HUI
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            
+            // On ne garde que les réservations dont la date de MÉNAGE (approx dateFin) est >= aujourd'hui
+            const relevant = resas.filter(r => new Date(r.dateFin) >= today);
             relevant.sort((a,b) => new Date(a.dateFin) - new Date(b.dateFin));
             
-            let html = '';
-            relevant.forEach(r => {
-                const menage = getMenageInfo(r, resas);
-                const status = window.DB_VALIDATIONS[r.id] || 'pending';
-                const btnClass = status === 'validated' ? 'btn-validation validated' : 'btn-validation pending';
-                const btnText = status === 'validated' ? '✅ FAIT' : '⏳ À FAIRE';
-                
-                html += `<div class="menage-item">
-                    <div><div class="menage-date">📅 ${menage.displayDate} ${menage.heure}</div>
-                    <div class="menage-detail">🏠 ${r.gite} - ${r.nom}</div></div>
-                    <button class="${btnClass}" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">${btnText}</button>
-                </div>`;
-            });
+            // Séparation par gîte
+            const trevoux = relevant.filter(r => r.gite === 'Trévoux');
+            const couzon = relevant.filter(r => r.gite === 'Couzon');
+            
+            function renderColumn(list) {
+                if(list.length === 0) return '<p style="text-align:center;color:#999;padding:20px;">Aucun ménage prévu</p>';
+                return list.map(r => {
+                    const menage = getMenageInfo(r, resas);
+                    const status = window.DB_VALIDATIONS[r.id] || 'pending';
+                    const btnClass = status === 'validated' ? 'btn-validation validated' : 'btn-validation pending';
+                    const btnText = status === 'validated' ? '✅ FAIT' : '⏳ À FAIRE';
+                    
+                    return `<div class="menage-item">
+                        <div>
+                            <div class="menage-date">📅 ${menage.displayDate} ${menage.heure} ${menage.enchainement ? '⚡' : ''}</div>
+                            <div class="menage-detail">Client: ${r.nom}</div>
+                        </div>
+                        <button class="${btnClass}" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">${btnText}</button>
+                    </div>`;
+                }).join('');
+            }
+
+            let html = `
+                <div class="menage-grid">
+                    <div>
+                        <div class="menage-col-header trevoux">🏰 Trévoux</div>
+                        ${renderColumn(trevoux)}
+                    </div>
+                    <div>
+                        <div class="menage-col-header couzon">⛰️ Couzon</div>
+                        ${renderColumn(couzon)}
+                    </div>
+                </div>
+            `;
             document.getElementById('menagePlanning').innerHTML = html;
         }
 
@@ -536,10 +543,8 @@
             const activites = window.activitesParGite[gite] || [];
             const container = document.getElementById('activitesParCategorie');
             if (activites.length === 0) { container.innerHTML = '<p style="text-align:center;padding:20px;color:#999">Aucune activité.</p>'; return; }
-            
             const parCat = {};
             activites.forEach(a => { if(!parCat[a.categorie]) parCat[a.categorie]=[]; parCat[a.categorie].push(a); });
-            
             let html = '';
             Object.keys(parCat).sort().forEach(cat => {
                 html += `<h3 style="color:var(--primary);margin-top:20px;border-bottom:1px solid #ddd">${cat}</h3>`;
@@ -606,8 +611,16 @@
             document.getElementById('statCA').innerText = total.toFixed(0) + ' €';
             document.getElementById('statTotal').innerText = resas.length;
             
+            // Chart CA Mensuel
             const data = Array(12).fill(0);
-            resas.forEach(r => { if(new Date(r.dateDebut).getFullYear() === new Date().getFullYear()) data[new Date(r.dateDebut).getMonth()] += r.montant; });
+            resas.forEach(r => { 
+                if(r.dateDebut) {
+                    const d = new Date(r.dateDebut);
+                    if(d.getFullYear() === new Date().getFullYear()) {
+                        data[d.getMonth()] += (r.montant || 0);
+                    }
+                }
+            });
             
             const ctx = document.getElementById('caChart');
             if(caChartInstance) caChartInstance.destroy();
@@ -615,14 +628,14 @@
         }
 
         // --- UTILS ---
-        function parseLocalDate(s) { const [y,m,d]=s.split('-'); return new Date(y,m-1,d); }
+        function parseLocalDate(s) { if(!s) return new Date(); const [y,m,d]=s.split('-'); return new Date(y,m-1,d); }
         function dateToLocalString(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
         function formatDate(d) { return new Date(d).toLocaleDateString('fr-FR'); }
         function formatDateShort(d) { return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); }
         function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7); return d.getUTCFullYear()+"-W"+weekNo; }
         
         function showToast(msg, type='success') { const t=document.getElementById('toast'); t.innerText=msg; t.style.background=type==='error'?'#E74C3C':'#27AE60'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
-        function switchTab(id) { document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active')); document.getElementById('tab-'+id).classList.add('active'); event.target.classList.add('active'); if(id==='statistiques') updateStats(); if(id==='charges') updateChargesDisplay(); }
+        function switchTab(id) { document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active')); document.getElementById('tab-'+id).classList.add('active'); event.target.classList.add('active'); if(id==='statistiques') updateStats(); if(id==='charges') updateChargesDisplay(); if(id==='menage') genererPlanningMenage(); }
         function selectGiteDecouvrir(gite) { document.getElementById('decouvrir_gite').value=gite; document.getElementById('selectedGiteDecouvrir').innerText=gite; document.getElementById('formDecouvrir').style.display='block'; chargerActivites(); }
         function toggleFormAjout() { const f=document.getElementById('formAjoutActivite'); f.style.display=f.style.display==='none'?'block':'none'; }
         
