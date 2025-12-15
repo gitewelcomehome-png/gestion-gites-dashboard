@@ -47,7 +47,7 @@
         // L'URL de votre projet
         const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co'; 
         
-        // Clé publique/anon (CORRIGÉE)
+        // Clé publique/anon 
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4'; 
         
         // Initialisation du client Supabase
@@ -147,7 +147,8 @@
                 const originalDate = task.date_fin; 
                 const resId = task.id;
                 const giteName = task.gite;
-                const clientInfo = task.client || 'Client Inconnu'; 
+                // CORRECTION ICI : Utilisation de nom_client au lieu de client
+                const clientInfo = task.nom_client || 'Client Inconnu'; 
 
                 const taskDiv = document.createElement('div');
                 taskDiv.className = `gite-task ${giteName}`;
@@ -199,9 +200,10 @@
             const endOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
 
             // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
+            // CORRECTION ICI : La colonne 'client' est remplacée par 'nom_client'
             const { data: reservations, error: resError } = await supabase
                 .from('reservations')
-                .select('id, date_debut, date_fin, gite, client') 
+                .select('id, date_debut, date_fin, gite, nom_client') 
                 .gte('date_fin', startOfMonth)
                 .lte('date_fin', endOfMonth)   
                 .order('date_fin', { ascending: true });
