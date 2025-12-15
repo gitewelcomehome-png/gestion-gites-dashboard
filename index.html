@@ -392,7 +392,7 @@
     </div>
 
     <script>
-        // --- 1. CONFIGURATION SUPABASE ---
+        // --- 1. CONFIGURATION SUPABASE ET VARIABLES GLOBALES ---
         const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -408,7 +408,74 @@
         let DB_CHARGES = [];
         let DB_HISTORICAL_CA = {}; 
         
-        // --- 2. FONCTIONS UTILES (Définies en premier pour éviter les ReferenceError) ---
+        // --- 2. AUTHENTIFICATION ET CHARGEMENT DE DONNÉES (DOIT ÊTRE DÉFINI TÔT) ---
+        
+        async function loadData() {
+            let { data: res } = await supabase.from('reservations').select('*');
+            DB_RESERVATIONS = (res || []).map(r => ({
+                ...r,
+                montant: parseFloat(r.montant) || 0,
+                telephone: r.telephone || ''
+            }));
+            
+            let { data: chg } = await supabase.from('charges').select('*');
+            DB_CHARGES = chg || [];
+
+            let { data: hist } = await supabase.from('historical_data').select('year, months');
+            DB_HISTORICAL_CA = {};
+            (hist || []).forEach(row => {
+                let monthlyData = row.months;
+                if (typeof monthlyData === 'string') {
+                    try {
+                        monthlyData = JSON.parse(monthlyData);
+                    } catch(e) {
+                        monthlyData = {};
+                    }
+                }
+                DB_HISTORICAL_CA[row.year] = monthlyData || {};
+            });
+
+            renderPlanning();
+            updateDashboard();
+            renderChargesList();
+        }
+
+        async function initAuth() {
+            const yearSelect = document.getElementById('stats-year');
+            const years = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
+            yearSelect.innerHTML = years.map(y => 
+                `<option value="${y}" ${y === CURRENT_YEAR ? 'selected' : ''}>${y}</option>`
+            ).join('');
+            
+            const caYearSelect = document.getElementById('ca-year-select');
+            caYearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+            const currentMonth = `${CURRENT_YEAR}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('cleaning-month-select').value = currentMonth;
+
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                await loadData(); 
+            }
+        }
+        
+        // Fonctions de login/logout appelées directement par les boutons HTML
+        window.handleLogin = async function() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
+            if (error) document.getElementById('login-msg').style.display = 'block';
+            else location.reload();
+        }
+        window.handleLogout = async function() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        // --- 3. FONCTIONS UTILES (Définies globalement pour l'onglet Ménage et Planning) ---
         
         window.isHoliday = function(date) {
             const d = new Date(date);
@@ -479,98 +546,6 @@
             return `${d.getDate()} ${MONTHS[d.getMonth()].toLowerCase().substring(0, 3)}.`; 
         }
         
-        // Définition de la fonction showTab (déjà présente dans votre code)
-        function showTab(id, btn) {
-            document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
-            document.getElementById('tab-'+id).classList.add('active');
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            if(id === 'statistiques') updateDashboard(); 
-            if(id === 'menage') loadCleaningView(); 
-        }
-        
-        // Helpers génériques (placeholders si non définis dans le fichier original)
-        function updateDashboard() { console.log("Updating Dashboard..."); }
-        function renderChargesList() { }
-        function openHistoricalCaModal() { }
-        function loadHistoricalCaData() { }
-        function saveHistoricalCaData() { }
-        function handleAddCharge(event) { event.preventDefault(); }
-        function syncAllCalendars() { }
-        function openEdit() { }
-        function deleteRes() { }
-        function saveEdit() { }
-        function saveIcalConfig() { }
-        function updateCommPreview() { }
-        function sendWhatsapp() { }
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-        window.showToast = function(msg) { console.log("TOAST:", msg); }
-
-
-        // --- 3. AUTHENTIFICATION & CHARGEMENT DES DONNÉES ---
-        async function initAuth() {
-            const yearSelect = document.getElementById('stats-year');
-            const years = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
-            yearSelect.innerHTML = years.map(y => 
-                `<option value="${y}" ${y === CURRENT_YEAR ? 'selected' : ''}>${y}</option>`
-            ).join('');
-            
-            const caYearSelect = document.getElementById('ca-year-select');
-            caYearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
-
-            const currentMonth = `${CURRENT_YEAR}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-            document.getElementById('cleaning-month-select').value = currentMonth;
-
-
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('app-content').style.display = 'block';
-                await loadData(); 
-            }
-        }
-        async function handleLogin() {
-            const email = document.getElementById('email').value;
-            const pass = document.getElementById('password').value;
-            const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
-            if (error) document.getElementById('login-msg').style.display = 'block';
-            else location.reload();
-        }
-        async function handleLogout() {
-            await supabase.auth.signOut();
-            location.reload();
-        }
-
-        async function loadData() {
-            let { data: res } = await supabase.from('reservations').select('*');
-            DB_RESERVATIONS = (res || []).map(r => ({
-                ...r,
-                montant: parseFloat(r.montant) || 0,
-                telephone: r.telephone || ''
-            }));
-            
-            let { data: chg } = await supabase.from('charges').select('*');
-            DB_CHARGES = chg || [];
-
-            let { data: hist } = await supabase.from('historical_data').select('year, months');
-            DB_HISTORICAL_CA = {};
-            (hist || []).forEach(row => {
-                let monthlyData = row.months;
-                if (typeof monthlyData === 'string') {
-                    try {
-                        monthlyData = JSON.parse(monthlyData);
-                    } catch(e) {
-                        monthlyData = {};
-                    }
-                }
-                DB_HISTORICAL_CA[row.year] = monthlyData || {};
-            });
-
-            renderPlanning();
-            updateDashboard();
-            renderChargesList();
-        }
-
         // --- 4. PLANNING CLASSIQUE (VUE SEMAINE - Garde toutes les dates) ---
         function renderPlanning(filterText = '') {
             const container = document.getElementById('planning-container');
@@ -590,7 +565,7 @@
             const weeks = {};
             allRes.forEach(r => {
                 const d = new Date(r.date_debut);
-                // Le code échouait ici car getWeekNumber n'était pas encore défini
+                // getWeekNumber est maintenant définie globalement
                 const wNum = getWeekNumber(d); 
                 const year = d.getFullYear();
                 const key = `${year}-W${wNum}`;
@@ -656,14 +631,7 @@
             </div>`;
         }
 
-        // --- 5. STATISTIQUES (Fonctions inchangées) ---
-        // ...
-
-        // --- 6. GESTION DES CHARGES ET RÉSERVATIONS (Fonctions inchangées) ---
-        // ...
-
-
-        // --- 7. GESTION DU MÉNAGE : Chargement Dynamique ---
+        // --- 5. GESTION DU MÉNAGE : Chargement Dynamique ---
         
         let isMenageViewLoaded = false;
         async function loadCleaningView() {
@@ -705,7 +673,36 @@
             }
         }
         
-        // Init
+        // --- 6. GESTION DES ONGLETS, MODALES ET HELPERS GÉNÉRIQUES ---
+        
+        function showTab(id, btn) {
+            document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+            document.getElementById('tab-'+id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if(id === 'statistiques') updateDashboard(); 
+            if(id === 'menage') loadCleaningView(); 
+        }
+        
+        // Placeholders de fonctions (pour éviter les ReferenceError si elles sont appelées ailleurs dans le code)
+        function updateDashboard() { console.log("Updating Dashboard..."); }
+        function renderChargesList() { }
+        function openHistoricalCaModal() { }
+        function loadHistoricalCaData() { }
+        function saveHistoricalCaData() { }
+        function handleAddCharge(event) { event.preventDefault(); }
+        function syncAllCalendars() { }
+        function openEdit() { }
+        function deleteRes() { }
+        function saveEdit() { }
+        function saveIcalConfig() { }
+        function updateCommPreview() { }
+        function sendWhatsapp() { }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        window.showToast = function(msg) { console.log("TOAST:", msg); }
+
+
+        // Init: Appel l'authentification au chargement de la fenêtre
         window.onload = initAuth;
 
     </script>
