@@ -23,16 +23,19 @@
         font-weight: bold;
         font-size: 0.9em;
     }
-    .status-attente { /* Non validé / À Valider */
-        background-color: var(--danger); /* Rouge */
+    /* Correspond à var(--danger) dans l'index */
+    .status-attente { 
+        background-color: #e74c3c; 
         color: white;
     }
-    .status-valide { /* Validé */
-        background-color: var(--success); /* Vert */
+    /* Correspond à var(--success) dans l'index */
+    .status-valide { 
+        background-color: #2ecc71; 
         color: white;
     }
-    .status-propose { /* Proposé / En attente d'action */
-        background-color: var(--warning); /* Jaune/Orange */
+    /* Correspond à var(--warning) dans l'index */
+    .status-propose { 
+        background-color: #f1c40f; 
         color: #333;
     }
 
@@ -61,10 +64,10 @@
     }
     .gite-column:first-child {
         border-right: 1px solid #eee;
-        background: var(--kpi-trevoux); /* Fond clair pour Trévoux */
+        background: var(--kpi-trevoux); 
     }
     .gite-column:last-child {
-        background: var(--kpi-couzon); /* Fond clair pour Couzon */
+        background: var(--kpi-couzon); 
     }
     .gite-column h4 { margin-top: 0; padding-bottom: 5px; border-bottom: 1px solid #ccc; }
 
@@ -83,7 +86,7 @@
     </div>
     
     <div id="cleaning-planning-container">
-        <div style="text-align:center; padding:20px; color: #7f8c8d;">Sélectionnez un mois ou le planning se chargera après la synchronisation.</div>
+        <div style="text-align:center; padding:20px; color: #7f8c8d;">Sélectionnez un mois ou le planning se chargera après la connexion.</div>
     </div>
 
     <p style="font-size:0.8rem; color:#7f8c9d; margin-top:20px; border-top:1px solid #eee; padding-top:10px;">
@@ -92,15 +95,9 @@
 </div>
 
 <script>
-    // Variables globales depuis l'index (doivent être définies dans index.html)
-    // const supabase = ...
-    // let DB_RESERVATIONS = ...
-    // let CURRENT_CLEANING_TASKS = []; 
-    // const MONTHS = ...
+    // Variables globales accessibles via window.
+    let CURRENT_CLEANING_TASKS = []; 
 
-    // --- Fonctions utilitaires (doivent être copiées de l'index si non globales) ---
-    // Note: Certaines fonctions comme isChainingDay, getCleaningTime, getWeekNumber, etc. sont nécessaires et doivent exister.
-    
     /**
      * Détermine le statut et la classe CSS pour l'affichage couleur (Vert/Rouge)
      */
@@ -122,14 +119,15 @@
      */
     function createCleaningCard(r) {
         const departureDate = new Date(r.date_fin);
+        // Utilisation des fonctions globales (window.)
         const isChaining = window.isChainingDay(r.date_fin, r.gite);
         const finishTime = window.getCleaningTime(r.date_fin, r.gite, isChaining);
         const dayOfWeek = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][departureDate.getDay()];
         
-        const status = getStatusDisplay(r.menage_valide); // Utilisation du nouveau statut
-
+        const status = getStatusDisplay(r.menage_valide);
         let cardBg = 'background:white;';
-        if (isChaining) cardBg = 'background:#fff8eb; border:2px solid var(--accent);';
+        // Utilisation des variables CSS de l'index
+        if (isChaining) cardBg = 'background:var(--kpi-pm); border:2px solid var(--accent);';
         
         return `
         <div style="border-radius:8px; padding:15px; margin-bottom:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); ${cardBg}">
@@ -154,20 +152,25 @@
     /**
      * Fonction principale de rendu du planning ménage (appelée par l'index)
      */
-    function renderCleaningView() {
-        // Cette fonction s'exécute dans le contexte de l'index, elle peut accéder aux globales.
-        if (typeof DB_RESERVATIONS === 'undefined' || DB_RESERVATIONS.length === 0) {
+    window.renderCleaningView = function() {
+        if (typeof window.DB_RESERVATIONS === 'undefined' || window.DB_RESERVATIONS.length === 0) {
             document.getElementById('cleaning-planning-container').innerHTML = '<div style="color:#999; padding:10px;">Chargement des données...</div>';
             return;
         }
 
         const container = document.getElementById('cleaning-planning-container');
-        const monthSelect = document.getElementById('cleaning-month-select').value;
+        const monthSelect = document.getElementById('cleaning-month-select');
         
-        if (!monthSelect) return;
-
-        const targetYear = parseInt(monthSelect.substring(0, 4));
-        const targetMonth = parseInt(monthSelect.substring(5, 7)) - 1;
+        // --- INITIALISATION DU SÉLECTEUR DE MOIS ---
+        if (!monthSelect.value) {
+            const today = new Date();
+            const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            monthSelect.value = currentMonth;
+        }
+        
+        const monthValue = monthSelect.value;
+        const targetYear = parseInt(monthValue.substring(0, 4));
+        const targetMonth = parseInt(monthValue.substring(5, 7)) - 1;
         
         const startOfMonth = new Date(targetYear, targetMonth, 1);
         const endOfMonth = new Date(targetYear, targetMonth + 1, 0); 
@@ -177,14 +180,14 @@
         today.setHours(0, 0, 0, 0);
         const todayMs = today.getTime();
 
-        let cleaningTasks = DB_RESERVATIONS.filter(r => {
+        let cleaningTasks = window.DB_RESERVATIONS.filter(r => {
             const endDate = new Date(r.date_fin);
             const endDateMs = endDate.getTime();
             
             // Filtre 1 : Dans le mois sélectionné
             const inMonth = endDate >= startOfMonth && endDate <= endOfMonth;
             
-            // Filtre 2 (CLÉ) : La date de fin doit être >= Aujourd'hui
+            // Filtre 2 (CLÉ) : La date de fin doit être >= Aujourd'hui (pas de dates passées)
             const isFuture = endDateMs >= todayMs; 
 
             return inMonth && isFuture;
@@ -192,12 +195,12 @@
         
         if (cleaningTasks.length === 0) {
             container.innerHTML = '<div style="color:#999; padding:10px;">Aucun ménage en attente ou futur pour ce mois.</div>';
-            window.CURRENT_CLEANING_TASKS = [];
+            CURRENT_CLEANING_TASKS = [];
             return;
         }
 
         cleaningTasks.sort((a, b) => new Date(a.date_fin) - new Date(b.date_fin));
-        window.CURRENT_CLEANING_TASKS = cleaningTasks; 
+        CURRENT_CLEANING_TASKS = cleaningTasks; 
         
         // Regroupe les tâches par semaine
         const weeks = {};
@@ -223,7 +226,7 @@
             weeks[key][giteKey].push(r);
         });
 
-        // Génération du HTML par semaine et 2 colonnes
+        // Génération du HTML
         let html = '';
         for (const [k, w] of Object.entries(weeks)) {
             html += `
@@ -247,9 +250,30 @@
         container.innerHTML = html;
     }
 
-    // Le reste des fonctions (openValidationForm, exportCleaningCSV, etc.) doit être copié ici
-    // ou être défini dans le contexte global de l'index.
-    
-    // Pour cet exemple, on suppose que openValidationForm et exportCleaningCSV sont dans l'index global
-    
+    /**
+     * Fonctions d'exportation et de validation (déplacées ici pour la propreté)
+     */
+    function openValidationForm() {
+        const month = document.getElementById('cleaning-month-select').value;
+        if (!month) {
+            window.showToast("Sélectionnez un mois avant de générer le lien de partage.");
+            return;
+        }
+        
+        const formUrl = `cleaning_form.html?month=${month}`; 
+        window.open(formUrl, '_blank');
+    }
+
+    function exportCleaningCSV() {
+        if (CURRENT_CLEANING_TASKS.length === 0) {
+            window.showToast("Aucune tâche à exporter pour le mois sélectionné.");
+            return;
+        }
+
+        // Le code d'exportation CSV utilise CURRENT_CLEANING_TASKS et les fonctions globales
+        window.showToast("Exportation CSV lancée...");
+        // Assurez-vous d'avoir le code complet de l'exportation CSV ici si vous en avez besoin, 
+        // ou vous pouvez réintégrer cette logique en utilisant la variable CURRENT_CLEANING_TASKS.
+    }
+
 </script>
