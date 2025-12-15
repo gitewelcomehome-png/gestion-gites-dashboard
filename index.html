@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestion Gîtes - Tableau de Bord</title>
+    <title>Gestion Gîtes - Tableau de Bord V3</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -14,7 +14,7 @@
     <style> 
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Work+Sans:wght@300;400;600;700&display=swap');
         
-        /* --- DESIGN SYSTEM (Style Actuel) --- */
+        /* --- DESIGN SYSTEM --- */
         :root {
             --primary: #2C3E50; --secondary: #34495E; --accent: #E67E22;
             --bg-body: #F4F6F8; --card-bg: #FFFFFF;
@@ -84,7 +84,7 @@
         .status-indicator { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; display:inline-block; margin-top:5px; }
         .status-attente { background-color: #e74c3c; color: white; }
 
-        /* ONGLET INFOS (ETAPE 2) */
+        /* ONGLET INFOS */
         .info-selector { display:flex; gap:10px; margin-bottom:20px; }
         .info-btn { flex:1; padding:15px; border:2px solid #ddd; border-radius:12px; background:white; cursor:pointer; font-weight:bold; font-size:1.1rem; transition:0.3s; }
         .info-btn.active { border-color:var(--secondary); background:var(--kpi-pm); color:var(--primary); }
@@ -101,10 +101,11 @@
         .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
         .toast { position: fixed; bottom: 30px; right: 30px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; display: none; z-index: 10000; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
+
+    <div style="position:fixed; bottom:5px; right:5px; font-size:10px; color:red; z-index:99999; background:white; padding:2px;">VERSION V3 - CORRECTION TRI</div>
 
     <div id="login-screen">
         <div class="login-box">
@@ -271,7 +272,7 @@
         }
         window.handleLogout = async function() { await supabase.auth.signOut(); location.reload(); }
 
-        // --- 2. FONCTIONS INFOS PRATIQUES (ETAPE 2) ---
+        // --- 2. FONCTIONS INFOS PRATIQUES ---
         window.switchInfoGite = async function(gite) {
             CURRENT_GITE_INFO = gite;
             document.getElementById('current-gite-name').textContent = gite;
@@ -323,50 +324,50 @@
             const sel = document.getElementById('stats-year');
             if(sel.options.length === 0) sel.innerHTML = `<option value="${y}">${y}</option><option value="${y-1}">${y-1}</option>`;
             
-            // Init Mois Ménage
-            const today = new Date().toISOString().slice(0,7);
-            document.getElementById('cleaning-month-select').value = today;
+            // Init Mois Ménage (force une valeur)
+            document.getElementById('cleaning-month-select').value = new Date().toISOString().slice(0,7);
 
             window.renderPlanning();
             window.renderChargesList();
             window.switchInfoGite('Trévoux');
         }
 
-        // --- PLANNING (Tri Chronologique Fix) ---
+        // --- PLANNING (TRI FIXÉ PAR TIMESTAMP) ---
         window.renderPlanning = function(filter='') {
             const container = document.getElementById('planning-container');
             let future = DB_RESERVATIONS.filter(r => new Date(r.date_fin) >= new Date());
             if(filter) future = future.filter(r => r.nom_client.toLowerCase().includes(filter.toLowerCase()));
+            
+            // Tri simple des réservations par date
             future.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
             
-            // Group par semaine et TRI PAR DATE (Fix)
-            const weeksArray = [];
+            // Utilisation d'une MAP pour regrouper par semaine, avec clé de tri TIMESTAMP
+            const weeksMap = new Map();
             
             future.forEach(r => {
                 const d = new Date(r.date_debut);
                 const wNum = getWeekNumber(d);
                 const start = getStartOfWeek(d);
-                const startStr = start.toISOString().split('T')[0]; // Clé de tri fiable
+                const startTs = start.getTime(); // Clé de tri numérique absolue
                 
-                let weekObj = weeksArray.find(w => w.startKey === startStr);
-                if (!weekObj) {
+                if (!weeksMap.has(startTs)) {
                     const end = new Date(start); end.setDate(end.getDate()+6);
-                    weekObj = { 
-                        startKey: startStr,
+                    weeksMap.set(startTs, { 
                         label: `Semaine ${wNum}`, 
                         dates: `${formatDateShort(start)} - ${formatDateShort(end)}`, 
-                        trevoux: [], couzon: [] 
-                    };
-                    weeksArray.push(weekObj);
+                        trevoux: [], 
+                        couzon: [] 
+                    });
                 }
-                weekObj[r.gite === 'Trévoux' ? 'trevoux' : 'couzon'].push(r);
+                
+                weeksMap.get(startTs)[r.gite === 'Trévoux' ? 'trevoux' : 'couzon'].push(r);
             });
 
-            // Tri par date de début de semaine
-            weeksArray.sort((a,b) => a.startKey.localeCompare(b.startKey));
+            // Conversion Map -> Array et tri par Timestamp (absolument chronologique)
+            const sortedWeeks = Array.from(weeksMap.entries()).sort((a,b) => a[0] - b[0]);
 
             let html = '';
-            weeksArray.forEach(w => {
+            sortedWeeks.forEach(([ts, w]) => {
                 html += `<div class="week-container"><div class="week-title">${w.label} <span style="opacity:0.7">${w.dates}</span></div>
                 <div class="week-grid">
                     <div class="day-column">${w.trevoux.map(r=>createResCard(r)).join('')}</div>
@@ -391,15 +392,19 @@
             const monthlyCA = new Array(12).fill(0);
             resYear.forEach(r => monthlyCA[new Date(r.date_debut).getMonth()] += r.montant);
             
-            if(monthlyChartInstance) monthlyChartInstance.destroy();
-            monthlyChartInstance = new Chart(document.getElementById('monthlyChart'), {
+            // Destruction explicite
+            if(monthlyChartInstance) { monthlyChartInstance.destroy(); monthlyChartInstance = null; }
+            if(platformChartInstance) { platformChartInstance.destroy(); platformChartInstance = null; }
+
+            // Dessin
+            const ctxM = document.getElementById('monthlyChart').getContext('2d');
+            monthlyChartInstance = new Chart(ctxM, {
                 type: 'bar', 
                 data: { labels: months, datasets: [{ label: 'CA', data: monthlyCA, backgroundColor: '#27ae60' }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
             
             const ctxP = document.getElementById('platformChart').getContext('2d');
-            if(platformChartInstance) platformChartInstance.destroy();
             const pData = [
                 resYear.filter(r=>r.plateforme?.toLowerCase().includes('airbnb')).length,
                 resYear.filter(r=>r.plateforme?.toLowerCase().includes('abritel')).length,
@@ -462,7 +467,7 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             if(id==='statistiques') {
-                setTimeout(window.updateDashboard, 50); // Fix pour charts
+                setTimeout(window.updateDashboard, 50); // Fix charts white
             }
             if(id==='menage') window.renderCleaningView();
         }
