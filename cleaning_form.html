@@ -34,7 +34,7 @@
         <p>Veuillez valider les dates de ménage proposées ou proposer une date de remplacement.</p>
         <div id="tasks-container">
             <div id="no-tasks-message" class="no-tasks" style="display: none;">
-                Aucun ménage n'est prévu pour ce mois ou les données ne sont pas disponibles.
+                Aucun ménage en attente n'est prévu pour ce mois.
             </div>
         </div>
         <div id="message-area"></div>
@@ -42,29 +42,23 @@
 
     <script>
         // ----------------------------------------------------
-        // ÉTAPE 1 : Configuration Supabase (Clés Intégrées)
+        // ÉTAPE 1 : Configuration Supabase
         // ----------------------------------------------------
-        // L'URL de votre projet
         const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co'; 
-        
-        // Clé publique/anon 
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4'; 
         
-        // Initialisation du client Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // ----------------------------------------------------
         // Fonctions Utilitaires
         // ----------------------------------------------------
 
-        // Formatage de date AAAA-MM-JJ vers JJ/MM/AAAA
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
             const [year, month, day] = dateString.split('-');
             return `${day}/${month}/${year}`;
         }
 
-        // Affiche un message de statut
         function displayMessage(text, type = 'success') {
             const area = document.getElementById('message-area');
             area.innerHTML = `<div class="message-container ${type}">${text}</div>`;
@@ -72,37 +66,56 @@
         }
 
         // ----------------------------------------------------
-        // ÉTAPE 2 : Insertion de la Validation (Fonction Critique)
+        // ÉTAPE 2 : Insertion et Mise à Jour des Validations (MODIFIÉ)
         // ----------------------------------------------------
 
         async function submitValidation(resId, gite, originalDate, validatedDate, status) {
             
-            // NOTE CRITIQUE : L'opération 'upsert' ne fonctionnera que si 'reservation_id' est UNIQUE dans votre table 'cleaning_validation' !
-            const { error } = await supabase
-                .from('cleaning_validation') 
-                .upsert([
-                    { 
-                        reservation_id: resId, 
-                        gite: gite,
-                        original_date: originalDate,
-                        validated_date: validatedDate,
-                        status: status
-                    }
-                ], { onConflict: 'reservation_id' }); 
+            // 1. Insertion/Mise à jour dans cleaning_validation
+            const validationData = { 
+                reservation_id: resId, 
+                gite: gite,
+                original_date: originalDate,
+                validated_date: validatedDate,
+                status: status
+            };
             
-            if (error) {
-                console.error("Erreur Supabase lors de l'insertion :", error);
-                displayMessage(`Erreur: La validation a échoué. Cause: ${error.message || 'Problème de connexion/RLS.'}`, 'error');
+            const { error: insertError } = await supabase
+                .from('cleaning_validation') 
+                .upsert([validationData], { onConflict: 'reservation_id' }); 
+            
+            if (insertError) {
+                console.error("Erreur Supabase lors de l'insertion :", insertError);
+                displayMessage(`Erreur: La validation a échoué. Cause: ${insertError.message || 'Problème de connexion/RLS.'}`, 'error');
                 return false;
-            } else {
-                displayMessage(`Validation enregistrée pour la réservation ID ${resId}. Statut: ${status}.`);
-                return true;
+            } 
+            
+            // 2. MISE À JOUR DANS LA TABLE RESERVATIONS (AJOUTÉ)
+            // Mise à jour de la colonne 'menage_valide' avec date et heure
+            const now = new Date().toLocaleString('fr-FR', {
+                day: '2-digit', month: '2-digit', year: 'numeric', 
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            const updateValue = `${status} le ${now}`;
+
+            const { error: updateError } = await supabase
+                .from('reservations')
+                .update({ menage_valide: updateValue })
+                .eq('id', resId); // Met à jour uniquement la ligne de réservation concernée
+
+            if (updateError) {
+                console.error("Erreur Supabase lors de la mise à jour de la réservation :", updateError);
+                // On peut quand même renvoyer true car la validation est enregistrée
             }
+            
+            displayMessage(`Validation enregistrée pour la réservation ID ${resId}. Statut: ${status}. La réservation a été mise à jour.`);
+            return true;
         }
 
 
         // ----------------------------------------------------
-        // ÉTAPE 3 : Rendu et Logique des Boutons (CORRECTION FINALE)
+        // ÉTAPE 3 : Rendu et Logique des Boutons
         // ----------------------------------------------------
 
         function renderTasks(tasks) {
@@ -125,7 +138,6 @@
                 taskDiv.className = `gite-task ${giteName}`;
                 taskDiv.id = `task-${resId}`;
 
-                // Utilisation des attributs data- pour stocker les informations de la réservation
                 taskDiv.innerHTML = `
                     <div class="task-header">
                         <div class="task-info">
@@ -144,12 +156,10 @@
                 container.appendChild(taskDiv);
             });
             
-            // --- ATTRIBUTION DES ÉVÉNEMENTS (Méthode addEventListener) ---
+            // --- ATTRIBUTION DES ÉVÉNEMENTS ---
             
-            // Événement pour tous les boutons OK
             document.querySelectorAll('.btn-ok').forEach(button => {
                 button.addEventListener('click', async (e) => {
-                    // Récupération des données via les attributs data-
                     const resId = e.target.dataset.resid;
                     const gite = e.target.dataset.gite;
                     const originalDate = e.target.dataset.date;
@@ -161,10 +171,8 @@
                 });
             });
 
-            // Événement pour tous les boutons Proposer
             document.querySelectorAll('.btn-proposer').forEach(button => {
                 button.addEventListener('click', async (e) => {
-                    // Récupération des données via les attributs data-
                     const resId = e.target.dataset.resid;
                     const gite = e.target.dataset.gite;
                     const originalDate = e.target.dataset.date;
@@ -181,12 +189,11 @@
                     }
                 });
             });
-            // ----------------------------------------------------
         }
 
 
         // ----------------------------------------------------
-        // ÉTAPE 4 : Initialisation et Récupération des Données
+        // ÉTAPE 4 : Initialisation et Récupération des Données (MODIFIÉ)
         // ----------------------------------------------------
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -197,22 +204,30 @@
                 document.getElementById('page-title').textContent = `Validation Planning Ménage - ${monthParam}`;
                 fetchCleaningTasks(monthParam);
             } else {
-                displayMessage('Erreur : Paramètre de mois (month=AAAA-MM) manquant dans l\'URL.', 'error');
-                document.getElementById('no-tasks-message').style.display = 'block';
+                // Si pas de mois spécifié, on prend la vue du mois en cours
+                const today = new Date();
+                const currentMonth = today.toISOString().slice(0, 7);
+                document.getElementById('page-title').textContent = `Validation Planning Ménage - ${currentMonth} (Tous les futurs)`;
+                fetchCleaningTasks(currentMonth);
             }
         });
 
         async function fetchCleaningTasks(month) {
             const startOfMonth = `${month}-01`;
             const endOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
+            
+            // Calcul de la date d'aujourd'hui au format AAAA-MM-JJ pour le filtre temporel
+            const today = new Date().toISOString().split('T')[0];
 
-            // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
+            // 1. Récupérer les réservations
             const { data: reservations, error: resError } = await supabase
                 .from('reservations')
-                // CORRIGÉ : Utilisation de nom_client au lieu de client
                 .select('id, date_debut, date_fin, gite, nom_client') 
+                // FILTRE 1 : Dans le mois spécifié (même si le mois est ignoré, on garde la structure)
                 .gte('date_fin', startOfMonth)
-                .lte('date_fin', endOfMonth)   
+                .lte('date_fin', endOfMonth)
+                // FILTRE 2 (AJOUTÉ) : La date de fin doit être AUJOURD'HUI ou dans le FUTUR
+                .gte('date_fin', today)   
                 .order('date_fin', { ascending: true });
 
             if (resError) {
@@ -221,7 +236,8 @@
                 return;
             }
 
-            // 2. Récupérer les validations déjà faites pour ces réservations
+            // ... (Le reste du code de filtrage des tâches déjà validées)
+            
             const reservationIds = reservations.map(r => r.id);
             const { data: validations, error: valError } = await supabase
                 .from('cleaning_validation')
@@ -232,7 +248,6 @@
                 console.error('Erreur Supabase lors du SELECT des validations :', valError);
             }
 
-            // 3. Filtrer les réservations pour n'afficher que celles qui n'ont pas encore été validées
             const validatedIds = new Set(validations ? validations.map(v => v.reservation_id) : []);
             const pendingTasks = reservations.filter(r => !validatedIds.has(r.id));
             
