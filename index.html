@@ -52,9 +52,11 @@
         .menage-item{background:#f0f9ff;padding:15px;margin-bottom:10px;border-radius:10px;border-left:5px solid #0ea5e9;display:flex;justify-content:space-between;align-items:center;}
         .menage-item.validated{background:#dcfce7;border-left-color:#22c55e;}
         .menage-date{font-weight:700;color:var(--primary);font-size:1.1rem;}
-        .status-badge{padding:5px 12px;border-radius:20px;font-size:0.8rem;font-weight:bold;text-transform:uppercase;}
-        .status-badge.valid{background:#22c55e;color:white;}
-        .status-badge.pending{background:#f59e0b;color:white;}
+        
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: 0.3s; }
+        .status-badge.valid { background: #22c55e; color: white; }
+        .status-badge.pending { background: #f59e0b; color: white; }
+        .status-badge:hover { opacity: 0.8; transform: scale(1.05); }
         
         .week-reservation{padding:15px;border-bottom:1px solid #eee;transition:0.2s;}
         .week-reservation:hover{background:#f8fafc;}
@@ -62,9 +64,14 @@
         .badge-airbnb{background:#FF5A5F;} .badge-abritel{background:#3498DB;} .badge-gites{background:#27AE60;}
         
         .toast { position: fixed; bottom: 30px; right: 30px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; display: none; z-index: 10000; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        
+        /* MODAL */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 5000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
         .modal-content { background: white; padding: 30px; border-radius: 20px; width: 500px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
-        
+        .form-group{margin-bottom:15px;}
+        .form-group label { display:block; margin-bottom:5px; font-weight:600; color:#333; }
+        .form-group input, .form-group select { width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; }
+
         @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
     </style>
 </head>
@@ -80,20 +87,14 @@
         </div>
     </div>
 
-    <div id="app-content">
+    <div id="app-content" style="display:none;">
         <div class="container">
             <header>
                 <div style="position: absolute; top: 0; right: 0;">
-                    <select onchange="handleQuickAction(this.value); this.value='';" style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;">
-                        <option value="" style="color:black;">⚡ Actions Rapides</option>
-                        <option value="ical" style="color:black;">⚙️ Config iCal</option>
-                        <option value="backup" style="color:black;">💾 Sauvegarder Données</option>
-                        <option value="logout" style="color:black;">🚪 Déconnexion</option>
-                    </select>
+                    <button class="btn btn-secondary" onclick="window.handleLogout()">Déconnexion</button>
                 </div>
-                
                 <h1>🏘️ Gestion Gîtes PRO</h1>
-                <p class="subtitle">Trévoux & Couzon - Tableau de Bord Intelligent</p>
+                <p class="subtitle">Trévoux & Couzon - Tableau de Bord</p>
             </header>
             
             <div class="nav-tabs">
@@ -112,7 +113,7 @@
                     <div class="card-header">
                         <span class="card-icon">📅</span>
                         <h2 class="card-title">Planning Global</h2>
-                        <button class="btn btn-primary" onclick="syncAllCalendars()" style="margin-left:auto;">🔄 Sync iCal</button>
+                        <button class="btn btn-primary" onclick="loadData()" style="margin-left:auto;">🔄 Actualiser</button>
                     </div>
                     <div id="planning-container">Chargement...</div>
                 </div>
@@ -153,10 +154,10 @@
                 <div class="card">
                     <div class="card-header"><span class="card-icon">💶</span><h2 class="card-title">Gestion des Charges</h2></div>
                     <form id="chargeForm" style="display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; align-items:end; margin-bottom:20px;">
-                        <div><label>Date</label><input type="date" id="chargeDate" style="width:100%; padding:10px;"></div>
-                        <div><label>Gîte</label><select id="chargeGite" style="width:100%; padding:10px;"><option>Trévoux</option><option>Couzon</option></select></div>
-                        <div><label>Nom</label><input type="text" id="chargeNom" placeholder="Ex: Elec" style="width:100%; padding:10px;"></div>
-                        <div><label>Montant</label><input type="number" id="chargeMontant" placeholder="0.00" style="width:100%; padding:10px;"></div>
+                        <div><label>Date</label><input type="date" id="chargeDate" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;"></div>
+                        <div><label>Gîte</label><select id="chargeGite" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;"><option>Trévoux</option><option>Couzon</option></select></div>
+                        <div><label>Nom</label><input type="text" id="chargeNom" placeholder="Ex: Elec" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;"></div>
+                        <div><label>Montant</label><input type="number" id="chargeMontant" placeholder="0.00" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px;"></div>
                         <button type="submit" class="btn btn-success">Ajouter</button>
                     </form>
                     <div id="chargesList"></div>
@@ -170,12 +171,12 @@
                         <h2 class="card-title">Planning Ménage & Validation</h2>
                     </div>
                     
+                    <div class="alert alert-warning" style="background:#FFF3CD; padding:15px; border-radius:8px; margin-bottom:20px; color:#856404;">
+                        <strong>📋 Règles automatiques :</strong> Dimanche → Lundi (sauf enchainement).
+                    </div>
+
                     <div style="display:flex; justify-content:space-between; margin-bottom:20px; align-items:center;">
-                        <div>Mois : <input type="month" id="menageExportMonth" onchange="window.genererPlanningMenage()" style="padding:8px; border-radius:8px;"></div>
-                        <div style="display:flex; gap:10px;">
-                            <button class="btn btn-primary" onclick="exportCleaningCSV()">📥 Export Excel</button>
-                            <a href="cleaning_form.html" target="_blank" class="btn btn-warning">🔗 Lien Société Ménage</a>
-                        </div>
+                        <div>Mois : <input type="month" id="menageExportMonth" onchange="window.genererPlanningMenage()" style="padding:8px; border-radius:8px; border:1px solid #ccc;"></div>
                     </div>
 
                     <div id="menagePlanning">Chargement...</div>
@@ -187,7 +188,7 @@
                     <div class="card-header">
                         <span class="card-icon">ℹ️</span>
                         <h2 class="card-title">Infos & Codes Clients</h2>
-                        <div style="margin-left:auto;">
+                        <div style="margin-left:auto; display:flex; gap:10px;">
                             <button class="btn btn-primary" onclick="switchInfoGite('Trévoux')">Trévoux</button>
                             <button class="btn btn-secondary" onclick="switchInfoGite('Couzon')">Couzon</button>
                         </div>
@@ -197,17 +198,17 @@
                     
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
                         <div>
-                            <label>WiFi SSID</label><input type="text" id="info_wifi_ssid" style="width:100%; padding:10px; margin-bottom:10px;">
-                            <label>WiFi Password</label><input type="text" id="info_wifi_pass" style="width:100%; padding:10px; margin-bottom:10px;">
+                            <label>WiFi SSID</label><input type="text" id="info_wifi_ssid" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px;">
+                            <label>WiFi Password</label><input type="text" id="info_wifi_pass" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px;">
                         </div>
                         <div>
-                            <label>Code Boîte à Clés</label><input type="text" id="info_code_porte" style="width:100%; padding:10px; margin-bottom:10px;">
-                            <label>Digicode Entrée</label><input type="text" id="info_digicode" style="width:100%; padding:10px; margin-bottom:10px;">
+                            <label>Code Boîte à Clés</label><input type="text" id="info_code_porte" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px;">
+                            <label>Digicode Entrée</label><input type="text" id="info_digicode" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:8px;">
                         </div>
                     </div>
                     <div style="margin-top:20px;">
                         <label>Consignes Arrivée/Départ</label>
-                        <textarea id="info_consignes" rows="5" style="width:100%; padding:10px; border-radius:8px;"></textarea>
+                        <textarea id="info_consignes" rows="5" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;"></textarea>
                     </div>
                     <button class="btn btn-success" style="margin-top:20px; width:100%;" onclick="saveInfosCurrentGite()">💾 Enregistrer les Infos</button>
                 </div>
@@ -216,25 +217,39 @@
             <div id="tab-decouvrir" class="tab-content">
                 <div class="card">
                     <div class="card-header"><span class="card-icon">🗺️</span><h2 class="card-title">Guide Touristique</h2></div>
-                    <p>Module à venir : Lieux touristiques et restaurants.</p>
+                    <p style="text-align:center; color:#666; padding:40px;">Module "À Découvrir" connecté à la table activites_gites. (En développement)</p>
                 </div>
             </div>
 
         </div>
     </div>
 
-    <div id="toast" class="toast"></div>
+    <div id="toast" class="toast">Info</div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom:20px;">Modifier Réservation</h2>
+            <input type="hidden" id="edit-id">
+            <div class="form-group"><label>Nom Client</label><input type="text" id="edit-name"></div>
+            <div class="form-group"><label>Montant (€)</label><input type="number" id="edit-amount"></div>
+            <div class="form-group"><label>Tél</label><input type="text" id="edit-phone"></div>
+            <div style="text-align:right; margin-top:20px;">
+                <button class="btn btn-danger" onclick="document.getElementById('editModal').style.display='none'">Annuler</button>
+                <button class="btn btn-success" onclick="saveEdit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // --- CONFIGURATION SUPABASE ---
+        // CONFIG SUPABASE
         const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // --- VARIABLES GLOBALES ---
+        // VARS GLOBALES
         let DB_RESERVATIONS = [];
         let DB_CHARGES = [];
-        let DB_VALIDATIONS = []; // Pour le statut ménage
+        let DB_VALIDATIONS = []; 
         let CURRENT_GITE_INFO = 'Trévoux';
         let caChartInstance = null;
 
@@ -247,12 +262,6 @@
             else location.reload();
         }
         window.handleLogout = async function() { await supabase.auth.signOut(); location.reload(); }
-        
-        window.handleQuickAction = function(val) {
-            if(val === 'logout') window.handleLogout();
-            if(val === 'ical') alert("Gestion iCal à venir");
-            if(val === 'backup') alert("Backup à venir");
-        }
 
         // --- 2. INITIALISATION ---
         async function initApp() {
@@ -260,13 +269,7 @@
             if (session) {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-content').style.display = 'block';
-                
-                // Charger toutes les données
-                await Promise.all([
-                    loadReservations(),
-                    loadCharges(),
-                    loadValidations()
-                ]);
+                await loadData();
                 
                 // Init UI
                 initStatsYear();
@@ -280,47 +283,42 @@
             }
         }
 
-        // --- 3. CHARGEMENT DONNÉES ---
-        async function loadReservations() {
-            const { data } = await supabase.from('reservations').select('*');
-            DB_RESERVATIONS = (data || []).map(r => ({...r, montant: parseFloat(r.montant)||0}));
-            // TRI CHRONOLOGIQUE STRICT
-            DB_RESERVATIONS.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
-        }
-        async function loadCharges() {
-            const { data } = await supabase.from('charges').select('*');
-            DB_CHARGES = data || [];
+        async function loadData() {
+            let { data: res } = await supabase.from('reservations').select('*');
+            DB_RESERVATIONS = (res || []).map(r => ({...r, montant: parseFloat(r.montant)||0}));
+            DB_RESERVATIONS.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut)); // Tri Date
+
+            let { data: chg } = await supabase.from('charges').select('*');
+            DB_CHARGES = chg || [];
+            
+            let { data: val } = await supabase.from('cleaning_validation').select('*');
+            DB_VALIDATIONS = val || [];
+            
             renderChargesList();
         }
-        async function loadValidations() {
-            const { data } = await supabase.from('cleaning_validation').select('*');
-            DB_VALIDATIONS = data || [];
-        }
 
-        // --- 4. PLANNING MÉNAGE INTELLIGENT + VALIDATION ---
+        // --- 3. PLANNING MÉNAGE INTELLIGENT + VALIDATION ---
         window.genererPlanningMenage = async function() {
             const container = document.getElementById('menagePlanning');
             const monthVal = document.getElementById('menageExportMonth').value;
             if(!monthVal) return;
             
-            // Recharger validations pour être à jour
-            await loadValidations(); 
+            // Recharger validations
+            let { data: val } = await supabase.from('cleaning_validation').select('*');
+            DB_VALIDATIONS = val || [];
 
             const [y, m] = monthVal.split('-').map(Number);
             const start = new Date(y, m-1, 1);
             const end = new Date(y, m, 0);
             
-            // Filtre réservations finissant ce mois-ci
             const tasks = DB_RESERVATIONS.filter(r => {
                 const d = new Date(r.date_fin);
                 return d >= start && d <= end;
             });
-            
             tasks.sort((a,b) => new Date(a.date_fin) - new Date(b.date_fin));
             
             let html = '';
             tasks.forEach(r => {
-                // Logique Claude (Simplifiée mais robuste)
                 const depart = new Date(r.date_fin);
                 let dateMenage = new Date(depart);
                 let heure = "12h00";
@@ -329,16 +327,15 @@
                 if (dateMenage.getDay() === 0) dateMenage.setDate(dateMenage.getDate() + 1);
                 
                 const dateKey = dateMenage.toISOString().split('T')[0];
-                
-                // Recherche Validation dans Supabase
-                // On cherche une validation pour ce gîte à cette date
                 const validation = DB_VALIDATIONS.find(v => v.gite === r.gite && v.date_menage === dateKey);
                 
-                let statusBadge = `<span class="status-badge pending">⏳ À Faire</span>`;
+                let badgeClass = "pending";
+                let badgeText = "⏳ À Faire";
                 let divClass = "menage-item";
                 
                 if (validation && validation.status === 'validated') {
-                    statusBadge = `<span class="status-badge valid">✅ Validé</span>`;
+                    badgeClass = "valid";
+                    badgeText = "✅ Validé";
                     divClass += " validated";
                 }
 
@@ -350,54 +347,38 @@
                             🧹 <strong>${r.gite}</strong> - Départ: ${r.nom_client}
                         </div>
                     </div>
-                    <div>${statusBadge}</div>
+                    <div>
+                        <span class="status-badge ${badgeClass}" onclick="toggleValidation('${r.gite}', '${dateKey}', '${badgeClass === 'valid' ? 'pending' : 'validated'}')">
+                            ${badgeText}
+                        </span>
+                    </div>
                 </div>`;
             });
-            
-            container.innerHTML = html || '<div style="padding:30px; text-align:center;">Aucun ménage prévu ce mois-ci.</div>';
+            container.innerHTML = html || '<div style="padding:30px; text-align:center;">Aucun ménage prévu.</div>';
         }
 
-        // --- 5. INFOS PRATIQUES (SUPABASE) ---
-        window.switchInfoGite = async function(gite) {
-            CURRENT_GITE_INFO = gite;
-            document.getElementById('info-title').textContent = "Gîte de " + gite;
-            
-            const { data } = await supabase.from('infos_gites').select('data').eq('gite_nom', gite).maybeSingle();
-            const infos = (data && data.data) ? data.data : {};
-            
-            document.getElementById('info_wifi_ssid').value = infos.wifi_ssid || '';
-            document.getElementById('info_wifi_pass').value = infos.wifi_pass || '';
-            document.getElementById('info_code_porte').value = infos.code_porte || '';
-            document.getElementById('info_digicode').value = infos.digicode || '';
-            document.getElementById('info_consignes').value = infos.consignes || '';
+        window.toggleValidation = async function(gite, date, newStatus) {
+            // Upsert validation
+            const { error } = await supabase.from('cleaning_validation').upsert(
+                { gite: gite, date_menage: date, status: newStatus },
+                { onConflict: 'gite,date_menage' }
+            );
+            if(!error) {
+                showToast(newStatus === 'validated' ? "Validé !" : "Remis en attente");
+                window.genererPlanningMenage(); // Refresh UI
+            }
         }
 
-        window.saveInfosCurrentGite = async function() {
-            const formData = {
-                wifi_ssid: document.getElementById('info_wifi_ssid').value,
-                wifi_pass: document.getElementById('info_wifi_pass').value,
-                code_porte: document.getElementById('info_code_porte').value,
-                digicode: document.getElementById('info_digicode').value,
-                consignes: document.getElementById('info_consignes').value
-            };
-            const { error } = await supabase.from('infos_gites').upsert({ gite_nom: CURRENT_GITE_INFO, data: formData }, { onConflict: 'gite_nom' });
-            if(!error) showToast("Infos enregistrées !");
-        }
-
-        // --- 6. PLANNING & STATS (RESTES DU CLAUDE FILE) ---
-        
+        // --- 4. PLANNING & STATS (ADAPTÉS DE CLAUDE) ---
         function renderPlanning() {
             const container = document.getElementById('planning-container');
             const future = DB_RESERVATIONS.filter(r => new Date(r.date_fin) >= new Date());
             
-            // Tri par date
-            future.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
-            
             let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
             future.forEach(r => {
-                const badge = r.plateforme.includes('Airbnb') ? 'badge-airbnb' : (r.plateforme.includes('Abritel') ? 'badge-abritel' : 'badge-gites');
+                const badge = r.plateforme.toLowerCase().includes('airbnb') ? 'badge-airbnb' : (r.plateforme.toLowerCase().includes('abritel') ? 'badge-abritel' : 'badge-gites');
                 html += `
-                <div class="week-reservation">
+                <div class="week-reservation" onclick="openEdit(${r.id}, '${r.nom_client.replace(/'/g,"\\'")}', ${r.montant}, '${r.telephone||''}')" style="cursor:pointer;">
                     <div style="display:flex; justify-content:space-between;">
                         <span style="font-weight:bold;">${r.nom_client}</span>
                         <span class="platform-badge ${badge}">${r.plateforme}</span>
@@ -421,7 +402,6 @@
             document.getElementById('statTrevoux').innerText = res.filter(r=>r.gite==='Trévoux').length;
             document.getElementById('statCouzon').innerText = res.filter(r=>r.gite==='Couzon').length;
             
-            // Chart
             const months = ['J','F','M','A','M','J','J','A','S','O','N','D'];
             const data = new Array(12).fill(0);
             res.forEach(r => data[new Date(r.date_debut).getMonth()] += r.montant);
@@ -429,20 +409,44 @@
             if(caChartInstance) caChartInstance.destroy();
             caChartInstance = new Chart(document.getElementById('caChart'), {
                 type: 'line',
-                data: { labels: months, datasets: [{ label: 'CA Mensuel', data: data, borderColor: '#0ea5e9', tension: 0.3, fill: true }] }
+                data: { labels: months, datasets: [{ label: 'CA Mensuel', data: data, borderColor: '#0ea5e9', tension: 0.3, fill: true }] },
+                options: { responsive: true, maintainAspectRatio: false }
             });
         }
 
+        // --- 5. INFOS PRATIQUES (SUPABASE) ---
+        window.switchInfoGite = async function(gite) {
+            CURRENT_GITE_INFO = gite;
+            document.getElementById('info-title').textContent = "Gîte de " + gite;
+            const { data } = await supabase.from('infos_gites').select('data').eq('gite_nom', gite).maybeSingle();
+            const infos = (data && data.data) ? data.data : {};
+            document.getElementById('info_wifi_ssid').value = infos.wifi_ssid || '';
+            document.getElementById('info_wifi_pass').value = infos.wifi_pass || '';
+            document.getElementById('info_code_porte').value = infos.code_porte || '';
+            document.getElementById('info_digicode').value = infos.digicode || '';
+            document.getElementById('info_consignes').value = infos.consignes || '';
+        }
+
+        window.saveInfosCurrentGite = async function() {
+            const formData = {
+                wifi_ssid: document.getElementById('info_wifi_ssid').value,
+                wifi_pass: document.getElementById('info_wifi_pass').value,
+                code_porte: document.getElementById('info_code_porte').value,
+                digicode: document.getElementById('info_digicode').value,
+                consignes: document.getElementById('info_consignes').value
+            };
+            const { error } = await supabase.from('infos_gites').upsert({ gite_nom: CURRENT_GITE_INFO, data: formData }, { onConflict: 'gite_nom' });
+            if(!error) showToast("Infos enregistrées !");
+        }
+
+        // --- UTILS ---
         function renderChargesList() {
             const div = document.getElementById('chargesList');
             let h = '<table style="width:100%; margin-top:15px;">';
-            DB_CHARGES.forEach(c => {
-                h += `<tr><td>${c.date}</td><td>${c.nom}</td><td>${c.gite}</td><td><b>${c.montant} €</b></td></tr>`;
-            });
+            DB_CHARGES.forEach(c => { h += `<tr><td>${c.date}</td><td>${c.nom}</td><td>${c.gite}</td><td><b>${c.montant} €</b></td></tr>`; });
             div.innerHTML = h + '</table>';
         }
-
-        // Gestionnaire Formulaire Charge
+        
         document.getElementById('chargeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const charge = {
@@ -452,16 +456,16 @@
                 montant: parseFloat(document.getElementById('chargeMontant').value)
             };
             await supabase.from('charges').insert([charge]);
-            loadCharges();
+            loadData(); // Reload all including charges
         });
 
-        // Utils
-        function switchTab(id) {
+        window.switchTab = function(id) {
             document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
             document.getElementById('tab-'+id).classList.add('active');
             event.target.classList.add('active');
             if(id === 'menage') window.genererPlanningMenage();
+            if(id === 'statistiques') setTimeout(updateStats, 50); // Hack chart render
         }
         
         function initStatsYear() {
@@ -475,12 +479,23 @@
             setTimeout(()=>t.style.display='none', 3000);
         }
         
-        function syncAllCalendars() {
-            alert("Fonction iCal à connecter au backend Supabase (Edge Functions) pour éviter les erreurs CORS.");
+        window.openEdit = function(id, name, amount, phone) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-amount').value = amount;
+            document.getElementById('edit-phone').value = phone;
+            document.getElementById('editModal').style.display='flex';
         }
-        
-        function exportCleaningCSV() {
-            alert("Export Excel prêt (voir fonction XLSX)");
+        window.saveEdit = async function() {
+            const id = document.getElementById('edit-id').value;
+            const updates = { 
+                nom_client: document.getElementById('edit-name').value,
+                montant: parseFloat(document.getElementById('edit-amount').value),
+                telephone: document.getElementById('edit-phone').value
+            };
+            await supabase.from('reservations').update(updates).eq('id', id);
+            document.getElementById('editModal').style.display='none';
+            loadData();
         }
 
         window.onload = initApp;
