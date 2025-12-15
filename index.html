@@ -14,18 +14,14 @@
     <style> 
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Work+Sans:wght@300;400;600;700&display=swap');
         
-        /* --- DESIGN SYSTEM (Verrouillé) --- */
+        /* --- DESIGN SYSTEM (Style Actuel) --- */
         :root {
             --primary: #2C3E50; --secondary: #34495E; --accent: #E67E22;
             --bg-body: #F4F6F8; --card-bg: #FFFFFF;
-            /* Couleurs Plateformes */
             --airbnb: #FF5A5F; --abritel: #3498DB; --gites: #27AE60; --other: #9B59B6; 
-            /* Couleurs Gîtes */
             --trevoux: #667eea; --couzon: #f093fb; 
-            /* Interface */
             --success: #2ecc71; --warning: #f1c40f; --danger: #e74c3c;
             --text-main: #2c3e50; --text-light: #7f8c8d; --border-radius: 12px;
-            /* KPI Fonds */
             --kpi-trevoux: #eaf1ff; --kpi-couzon: #fde8ff; --kpi-pm: #fff8eb; --kpi-duree: #ebf5ff; --kpi-top-month: #e8fff1;
         }
         
@@ -275,7 +271,47 @@
         }
         window.handleLogout = async function() { await supabase.auth.signOut(); location.reload(); }
 
-        // --- 2. FONCTIONS EXISTANTES (TRI CORRIGÉ & RENDU SÉCURISÉ) ---
+        // --- 2. FONCTIONS INFOS PRATIQUES (ETAPE 2) ---
+        window.switchInfoGite = async function(gite) {
+            CURRENT_GITE_INFO = gite;
+            document.getElementById('current-gite-name').textContent = gite;
+            document.getElementById('btn-info-trevoux').classList.toggle('active', gite==='Trévoux');
+            document.getElementById('btn-info-couzon').classList.toggle('active', gite==='Couzon');
+            
+            const { data, error } = await supabase.from('infos_gites').select('data').eq('gite_nom', gite).maybeSingle();
+            const infos = (data && data.data) ? data.data : {};
+            
+            document.getElementById('info_wifi_ssid').value = infos.wifi_ssid || '';
+            document.getElementById('info_wifi_pass').value = infos.wifi_pass || '';
+            document.getElementById('info_code_porte').value = infos.code_porte || '';
+            document.getElementById('info_digicode').value = infos.digicode || '';
+            document.getElementById('info_adresse').value = infos.adresse || '';
+            document.getElementById('info_parking').value = infos.parking || '';
+            document.getElementById('info_poubelles').value = infos.poubelles || '';
+            document.getElementById('info_chauffage').value = infos.chauffage || '';
+            document.getElementById('info_electro').value = infos.electro || '';
+            document.getElementById('info_depart').value = infos.depart || '';
+        }
+
+        window.saveInfosCurrentGite = async function() {
+            const formData = {
+                wifi_ssid: document.getElementById('info_wifi_ssid').value,
+                wifi_pass: document.getElementById('info_wifi_pass').value,
+                code_porte: document.getElementById('info_code_porte').value,
+                digicode: document.getElementById('info_digicode').value,
+                adresse: document.getElementById('info_adresse').value,
+                parking: document.getElementById('info_parking').value,
+                poubelles: document.getElementById('info_poubelles').value,
+                chauffage: document.getElementById('info_chauffage').value,
+                electro: document.getElementById('info_electro').value,
+                depart: document.getElementById('info_depart').value
+            };
+            const { error } = await supabase.from('infos_gites').upsert({ gite_nom: CURRENT_GITE_INFO, data: formData }, { onConflict: 'gite_nom' });
+            if(error) window.showToast('Erreur sauvegarde', true);
+            else window.showToast('Infos enregistrées !');
+        }
+
+        // --- 3. FONCTIONS EXISTANTES ---
         window.loadData = async function() {
             let { data: res } = await supabase.from('reservations').select('*');
             DB_RESERVATIONS = (res||[]).map(r => ({...r, montant: parseFloat(r.montant)||0}));
@@ -287,7 +323,7 @@
             const sel = document.getElementById('stats-year');
             if(sel.options.length === 0) sel.innerHTML = `<option value="${y}">${y}</option><option value="${y-1}">${y-1}</option>`;
             
-            // Init Mois Ménage (Fix du sélecteur vide)
+            // Init Mois Ménage
             const today = new Date().toISOString().slice(0,7);
             document.getElementById('cleaning-month-select').value = today;
 
@@ -303,30 +339,26 @@
             if(filter) future = future.filter(r => r.nom_client.toLowerCase().includes(filter.toLowerCase()));
             future.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
             
-            // Group par semaine et TRI PAR DATE (pas par texte)
+            // Group par semaine et TRI PAR DATE (Fix)
             const weeksArray = [];
             
             future.forEach(r => {
                 const d = new Date(r.date_debut);
                 const wNum = getWeekNumber(d);
                 const start = getStartOfWeek(d);
-                const startStr = start.toISOString().split('T')[0]; // Clé de tri fiable (YYYY-MM-DD)
+                const startStr = start.toISOString().split('T')[0]; // Clé de tri fiable
                 
-                // Chercher si la semaine existe déjà
                 let weekObj = weeksArray.find(w => w.startKey === startStr);
-                
                 if (!weekObj) {
                     const end = new Date(start); end.setDate(end.getDate()+6);
                     weekObj = { 
                         startKey: startStr,
                         label: `Semaine ${wNum}`, 
                         dates: `${formatDateShort(start)} - ${formatDateShort(end)}`, 
-                        trevoux: [], 
-                        couzon: [] 
+                        trevoux: [], couzon: [] 
                     };
                     weeksArray.push(weekObj);
                 }
-                
                 weekObj[r.gite === 'Trévoux' ? 'trevoux' : 'couzon'].push(r);
             });
 
@@ -400,46 +432,6 @@
             list.innerHTML = html + '</table>';
         }
 
-        // --- NOUVEAU : FONCTIONS INFOS PRATIQUES ---
-        window.switchInfoGite = async function(gite) {
-            CURRENT_GITE_INFO = gite;
-            document.getElementById('current-gite-name').textContent = gite;
-            document.getElementById('btn-info-trevoux').classList.toggle('active', gite==='Trévoux');
-            document.getElementById('btn-info-couzon').classList.toggle('active', gite==='Couzon');
-            
-            const { data, error } = await supabase.from('infos_gites').select('data').eq('gite_nom', gite).maybeSingle();
-            const infos = (data && data.data) ? data.data : {};
-            
-            document.getElementById('info_wifi_ssid').value = infos.wifi_ssid || '';
-            document.getElementById('info_wifi_pass').value = infos.wifi_pass || '';
-            document.getElementById('info_code_porte').value = infos.code_porte || '';
-            document.getElementById('info_digicode').value = infos.digicode || '';
-            document.getElementById('info_adresse').value = infos.adresse || '';
-            document.getElementById('info_parking').value = infos.parking || '';
-            document.getElementById('info_poubelles').value = infos.poubelles || '';
-            document.getElementById('info_chauffage').value = infos.chauffage || '';
-            document.getElementById('info_electro').value = infos.electro || '';
-            document.getElementById('info_depart').value = infos.depart || '';
-        }
-
-        window.saveInfosCurrentGite = async function() {
-            const formData = {
-                wifi_ssid: document.getElementById('info_wifi_ssid').value,
-                wifi_pass: document.getElementById('info_wifi_pass').value,
-                code_porte: document.getElementById('info_code_porte').value,
-                digicode: document.getElementById('info_digicode').value,
-                adresse: document.getElementById('info_adresse').value,
-                parking: document.getElementById('info_parking').value,
-                poubelles: document.getElementById('info_poubelles').value,
-                chauffage: document.getElementById('info_chauffage').value,
-                electro: document.getElementById('info_electro').value,
-                depart: document.getElementById('info_depart').value
-            };
-            const { error } = await supabase.from('infos_gites').upsert({ gite_nom: CURRENT_GITE_INFO, data: formData }, { onConflict: 'gite_nom' });
-            if(error) window.showToast('Erreur sauvegarde', true);
-            else window.showToast('Infos enregistrées !');
-        }
-
         // --- HELPERS ---
         function createResCard(r) {
             const isBlocked = r.nom_client.includes('BLOQUÉ');
@@ -458,7 +450,6 @@
         function getStartOfWeek(d) { const date = new Date(d); const day = date.getDay() || 7; if(day !== 1) date.setHours(-24 * (day - 1)); return date; }
         function formatDate(s) { 
             if(!s) return ''; 
-            // Fix s.match error: Ensure string
             if(typeof s !== 'string') s = new Date(s).toISOString().slice(0,10);
             return new Date(s).toLocaleDateString('fr-FR'); 
         }
@@ -470,7 +461,9 @@
             document.getElementById('tab-'+id).classList.add('active');
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            if(id==='statistiques') window.updateDashboard(); // Force update on click
+            if(id==='statistiques') {
+                setTimeout(window.updateDashboard, 50); // Fix pour charts
+            }
             if(id==='menage') window.renderCleaningView();
         }
         
