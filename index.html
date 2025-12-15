@@ -601,4 +601,111 @@
             let platformColor;
             if (platformLower.includes('airbnb')) platformColor = 'var(--airbnb)';
             else if (platformLower.includes('abritel') || platformLower.includes('homeway')) platformColor = 'var(--abritel)';
-            else if (platformLower.includes('gite') || platformLower.includes('gîtes')) platform
+            else if (platformLower.includes('gite') || platformLower.includes('gîtes')) platformColor = 'var(--gites)';
+            else platformColor = 'var(--gites)'; 
+            
+            const dEnd = new Date(r.date_fin);
+            const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            
+            const isChaining = window.isChainingDay(r.date_fin, r.gite);
+            const finishTime = window.getCleaningTime(r.date_fin, r.gite, isChaining);
+            const menageStr = `🧹 ${days[dEnd.getDay()]} ${dEnd.getDate()} - Prêt avant ${finishTime.split('(')[0]}`;
+
+            const isBlocked = r.nom_client && r.nom_client.toUpperCase().includes('BLOQUÉ');
+
+            const safeName = r.nom_client ? r.nom_client.replace(/'/g, "\\'") : 'Client';
+            const safePhone = r.telephone ? r.telephone.replace(/'/g, "\\'") : '';
+            const resId = r.id;
+
+            return `
+            <div class="res-card ${isBlocked ? 'blocked' : ''}">
+                <div class="actions">
+                    <i class="fas fa-pen" style="cursor:pointer; color:#3498db;" onclick="openEdit(${resId}, '${safeName}', ${r.montant}, '${safePhone}')"></i>
+                    <i class="fas fa-trash" style="cursor:pointer; color:#e74c3c;" onclick="deleteRes(${resId})"></i>
+                </div>
+                <div class="client">${isBlocked ? '<i class="fas fa-ban"></i> ' : ''}${r.nom_client}</div>
+                <div class="dates"><i class="far fa-calendar"></i> ${formatDate(r.date_debut)} ➝ ${formatDate(r.date_fin)}</div>
+                ${r.telephone ? `<div class="phone"><i class="fas fa-phone"></i> ${r.telephone}</div>` : ''}
+                <div class="price">💰 ${Number(r.montant).toFixed(2)} €</div>
+                <div class="menage-info">${menageStr}</div>
+                <span class="platform-badge" style="background:${platformColor}">${r.plateforme}</span>
+            </div>`;
+        }
+
+        // --- 5. GESTION DU MÉNAGE : Chargement Dynamique ---
+        
+        let isMenageViewLoaded = false;
+        async function loadCleaningView() {
+            const tabMenage = document.getElementById('tab-menage');
+            if (isMenageViewLoaded) {
+                if (window.renderCleaningView) window.renderCleaningView();
+                return;
+            }
+
+            try {
+                const response = await fetch('menage_view.html');
+                if (!response.ok) throw new Error('Erreur de chargement de menage_view.html');
+                
+                const htmlContent = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+
+                const style = doc.querySelector('style');
+                if (style) document.head.appendChild(style);
+
+                const script = doc.querySelector('script');
+                if (script) {
+                    const scriptElement = document.createElement('script');
+                    scriptElement.textContent = script.textContent;
+                    document.body.appendChild(scriptElement);
+                }
+                
+                const menageViewContent = doc.querySelector('.menage-container') || doc.body; 
+                tabMenage.innerHTML = menageViewContent.innerHTML; 
+
+                isMenageViewLoaded = true;
+                
+                if (window.renderCleaningView) window.renderCleaningView();
+
+            } catch (e) {
+                console.error("Échec du chargement de la vue ménage :", e);
+                tabMenage.innerHTML = `<div class="card"><div style="color:red; text-align:center;">Impossible de charger la vue Planning Ménage. Vérifiez la console pour les erreurs 404.</div></div>`;
+            }
+        }
+        
+        // --- 6. GESTION DES ONGLETS, MODALES ET HELPERS GÉNÉRIQUES ---
+        
+        function showTab(id, btn) {
+            document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+            document.getElementById('tab-'+id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if(id === 'statistiques') updateDashboard(); 
+            if(id === 'menage') loadCleaningView(); 
+        }
+        
+        // Placeholders de fonctions (pour éviter les ReferenceError si elles sont appelées ailleurs dans le code)
+        function updateDashboard() { console.log("Updating Dashboard..."); }
+        function renderChargesList() { }
+        function openHistoricalCaModal() { }
+        function loadHistoricalCaData() { }
+        function saveHistoricalCaData() { }
+        function handleAddCharge(event) { event.preventDefault(); }
+        function syncAllCalendars() { }
+        function openEdit() { }
+        function deleteRes() { }
+        function saveEdit() { }
+        function saveIcalConfig() { }
+        function updateCommPreview() { }
+        function sendWhatsapp() { }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        window.showToast = function(msg) { console.log("TOAST:", msg); }
+
+
+        // Init: Appel l'authentification au chargement de la fenêtre
+        window.onload = initAuth;
+
+    </script>
+</body>
+</html>
