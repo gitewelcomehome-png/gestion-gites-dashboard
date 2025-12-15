@@ -102,35 +102,14 @@
 
 
         // ----------------------------------------------------
-        // ÉTAPE 3 : Rendu et Logique des Boutons
+        // ÉTAPE 3 : Rendu et Logique des Boutons (CORRIGÉ)
         // ----------------------------------------------------
 
-        function createActionButton(resId, gite, originalDate, validatedDate, status, buttonText, buttonClass, dateInputId = null) {
+        // La fonction crée le bouton mais ne lui attache pas encore l'événement
+        function createButtonElement(buttonText, buttonClass) {
             const button = document.createElement('button');
             button.className = buttonClass;
             button.textContent = buttonText;
-            
-            button.onclick = async () => {
-                let finalDate = validatedDate;
-
-                if (dateInputId) {
-                    const input = document.getElementById(dateInputId);
-                    if (input.value) {
-                        finalDate = input.value; 
-                    } else {
-                        displayMessage('Veuillez sélectionner une date alternative.', 'error');
-                        return;
-                    }
-                }
-                
-                // Lancement de l'insertion
-                const success = await submitValidation(resId, gite, originalDate, finalDate, status);
-                
-                if (success) {
-                    // Masquer la tâche après succès
-                    document.getElementById(`task-${resId}`).style.display = 'none';
-                }
-            };
             return button;
         }
 
@@ -147,7 +126,6 @@
                 const originalDate = task.date_fin; 
                 const resId = task.id;
                 const giteName = task.gite;
-                // CORRECTION ICI : Utilisation de nom_client au lieu de client
                 const clientInfo = task.nom_client || 'Client Inconnu'; 
 
                 const taskDiv = document.createElement('div');
@@ -155,8 +133,9 @@
                 taskDiv.id = `task-${resId}`;
 
                 const dateInputId = `date-input-${resId}`;
-
-                taskDiv.innerHTML = `
+                
+                // Création de la structure HTML interne
+                const innerHTML = `
                     <div class="task-header">
                         <div class="task-info">
                             <strong>${giteName} : ${formatDate(originalDate)}</strong>
@@ -164,16 +143,44 @@
                         </div>
                         <div class="prep-info">Prêt avant : 12h00</div>
                     </div>
-                    <div class="task-actions">
-                        ${createActionButton(resId, giteName, originalDate, originalDate, 'Validé', 'OK', 'btn-ok').outerHTML}
-                        
+                    <div class="task-actions" id="actions-${resId}">
                         <span>Proposer autre date :</span>
                         <input type="date" id="${dateInputId}" class="date-input" />
-                        
-                        ${createActionButton(resId, giteName, originalDate, null, 'Proposé', 'Proposer', 'btn-proposer', dateInputId).outerHTML}
                     </div>
                 `;
+                taskDiv.innerHTML = innerHTML;
                 container.appendChild(taskDiv);
+                
+                // --- AJOUT DES BOUTONS ET DES LISTENERS (CORRECTION) ---
+                const actionsContainer = document.getElementById(`actions-${resId}`);
+                
+                // 1. Bouton OK
+                const btnOk = createButtonElement('OK', 'btn-ok');
+                btnOk.onclick = async () => {
+                    const success = await submitValidation(resId, giteName, originalDate, originalDate, 'Validé');
+                    if (success) {
+                        document.getElementById(`task-${resId}`).style.display = 'none';
+                    }
+                };
+
+                // 2. Bouton Proposer
+                const btnProposer = createButtonElement('Proposer', 'btn-proposer');
+                btnProposer.onclick = async () => {
+                    const input = document.getElementById(dateInputId);
+                    if (input.value) {
+                        const success = await submitValidation(resId, giteName, originalDate, input.value, 'Proposé');
+                        if (success) {
+                            document.getElementById(`task-${resId}`).style.display = 'none';
+                        }
+                    } else {
+                        displayMessage('Veuillez sélectionner une date alternative.', 'error');
+                    }
+                };
+                
+                // Insertion des boutons dans le conteneur d'actions
+                actionsContainer.prepend(btnOk); // Ajout du bouton OK
+                actionsContainer.appendChild(btnProposer); // Ajout du bouton Proposer
+                // ----------------------------------------------------------
             });
         }
 
@@ -200,7 +207,6 @@
             const endOfMonth = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 0).toISOString().split('T')[0];
 
             // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
-            // CORRECTION ICI : La colonne 'client' est remplacée par 'nom_client'
             const { data: reservations, error: resError } = await supabase
                 .from('reservations')
                 .select('id, date_debut, date_fin, gite, nom_client') 
