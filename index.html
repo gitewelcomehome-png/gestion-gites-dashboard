@@ -68,8 +68,8 @@
         </div>
 
         <p style="margin-top: 30px; text-align: center;">
-            <a href="/cleaning_form.html?month=2025-12" style="padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px;">
-                Aller au Formulaire de Validation Ménage (Décembre 2025)
+            <a id="validation-link" href="#" style="padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px;">
+                Aller au Formulaire de Validation Ménage
             </a>
         </p>
     </div>
@@ -94,7 +94,7 @@
         }
 
         function getStatusDisplay(menageValide) {
-            // Détermine le statut et la classe CSS
+            // Détermine le statut et la classe CSS pour l'affichage couleur (Vert = Validé, Rouge = Autre/Attente)
             if (menageValide && menageValide.includes('Validé')) {
                 return { 
                     text: menageValide, 
@@ -148,14 +148,19 @@
             document.getElementById('no-reservations').style.display = 'none';
             document.getElementById('error-display').style.display = 'none';
 
-            // Date d'aujourd'hui pour filtrer les dates passées
+            // Date d'aujourd'hui au format AAAA-MM-JJ pour le filtre
             const today = new Date().toISOString().split('T')[0];
+            const currentMonth = new Date().toISOString().slice(0, 7);
+
+            // Mise à jour du lien de validation pour pointer vers le mois en cours
+            document.getElementById('validation-link').href = `/cleaning_form.html?month=${currentMonth}`;
+            document.getElementById('validation-link').textContent = `Aller au Formulaire de Validation Ménage (${currentMonth})`;
 
             // Requête SELECT qui filtre uniquement les dates futures
             const { data: reservations, error } = await supabase
                 .from('reservations')
                 .select('id, gite, date_debut, date_fin, nom_client, menage_valide') 
-                .gte('date_fin', today)   // FILTRE CLÉ : Date de fin >= Aujourd'hui
+                .gte('date_fin', today)   // Filtre temporel pour n'afficher que le futur/aujourd'hui
                 .order('date_fin', { ascending: true });
 
             document.getElementById('loading').style.display = 'none';
