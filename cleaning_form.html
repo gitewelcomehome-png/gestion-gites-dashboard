@@ -102,16 +102,8 @@
 
 
         // ----------------------------------------------------
-        // ÉTAPE 3 : Rendu et Logique des Boutons (CORRIGÉ)
+        // ÉTAPE 3 : Rendu et Logique des Boutons (CORRECTION FINALE)
         // ----------------------------------------------------
-
-        // La fonction crée le bouton mais ne lui attache pas encore l'événement
-        function createButtonElement(buttonText, buttonClass) {
-            const button = document.createElement('button');
-            button.className = buttonClass;
-            button.textContent = buttonText;
-            return button;
-        }
 
         function renderTasks(tasks) {
             const container = document.getElementById('tasks-container');
@@ -127,15 +119,14 @@
                 const resId = task.id;
                 const giteName = task.gite;
                 const clientInfo = task.nom_client || 'Client Inconnu'; 
+                const dateInputId = `date-input-${resId}`;
 
                 const taskDiv = document.createElement('div');
                 taskDiv.className = `gite-task ${giteName}`;
                 taskDiv.id = `task-${resId}`;
 
-                const dateInputId = `date-input-${resId}`;
-                
-                // Création de la structure HTML interne
-                const innerHTML = `
+                // Utilisation des attributs data- pour stocker les informations de la réservation
+                taskDiv.innerHTML = `
                     <div class="task-header">
                         <div class="task-info">
                             <strong>${giteName} : ${formatDate(originalDate)}</strong>
@@ -144,44 +135,53 @@
                         <div class="prep-info">Prêt avant : 12h00</div>
                     </div>
                     <div class="task-actions" id="actions-${resId}">
+                        <button class="btn-ok" data-resid="${resId}" data-gite="${giteName}" data-date="${originalDate}" data-status="Validé">OK</button>
                         <span>Proposer autre date :</span>
                         <input type="date" id="${dateInputId}" class="date-input" />
+                        <button class="btn-proposer" data-resid="${resId}" data-gite="${giteName}" data-date="${originalDate}" data-status="Proposé" data-inputid="${dateInputId}">Proposer</button>
                     </div>
                 `;
-                taskDiv.innerHTML = innerHTML;
                 container.appendChild(taskDiv);
-                
-                // --- AJOUT DES BOUTONS ET DES LISTENERS (CORRECTION) ---
-                const actionsContainer = document.getElementById(`actions-${resId}`);
-                
-                // 1. Bouton OK
-                const btnOk = createButtonElement('OK', 'btn-ok');
-                btnOk.onclick = async () => {
-                    const success = await submitValidation(resId, giteName, originalDate, originalDate, 'Validé');
+            });
+            
+            // --- ATTRIBUTION DES ÉVÉNEMENTS (Méthode addEventListener) ---
+            
+            // Événement pour tous les boutons OK
+            document.querySelectorAll('.btn-ok').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    // Récupération des données via les attributs data-
+                    const resId = e.target.dataset.resid;
+                    const gite = e.target.dataset.gite;
+                    const originalDate = e.target.dataset.date;
+                    
+                    const success = await submitValidation(resId, gite, originalDate, originalDate, 'Validé');
                     if (success) {
                         document.getElementById(`task-${resId}`).style.display = 'none';
                     }
-                };
+                });
+            });
 
-                // 2. Bouton Proposer
-                const btnProposer = createButtonElement('Proposer', 'btn-proposer');
-                btnProposer.onclick = async () => {
+            // Événement pour tous les boutons Proposer
+            document.querySelectorAll('.btn-proposer').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    // Récupération des données via les attributs data-
+                    const resId = e.target.dataset.resid;
+                    const gite = e.target.dataset.gite;
+                    const originalDate = e.target.dataset.date;
+                    const dateInputId = e.target.dataset.inputid;
                     const input = document.getElementById(dateInputId);
+                    
                     if (input.value) {
-                        const success = await submitValidation(resId, giteName, originalDate, input.value, 'Proposé');
+                        const success = await submitValidation(resId, gite, originalDate, input.value, 'Proposé');
                         if (success) {
                             document.getElementById(`task-${resId}`).style.display = 'none';
                         }
                     } else {
                         displayMessage('Veuillez sélectionner une date alternative.', 'error');
                     }
-                };
-                
-                // Insertion des boutons dans le conteneur d'actions
-                actionsContainer.prepend(btnOk); // Ajout du bouton OK
-                actionsContainer.appendChild(btnProposer); // Ajout du bouton Proposer
-                // ----------------------------------------------------------
+                });
             });
+            // ----------------------------------------------------
         }
 
 
@@ -209,6 +209,7 @@
             // 1. Récupérer les réservations pour lesquelles la date_fin est dans le mois
             const { data: reservations, error: resError } = await supabase
                 .from('reservations')
+                // CORRIGÉ : Utilisation de nom_client au lieu de client
                 .select('id, date_debut, date_fin, gite, nom_client') 
                 .gte('date_fin', startOfMonth)
                 .lte('date_fin', endOfMonth)   
