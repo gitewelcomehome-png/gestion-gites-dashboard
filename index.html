@@ -443,80 +443,13 @@
         let profitChartInstance = null;
 
 
-        // --- 2. AUTHENTIFICATION & CHARGEMENT DES DONNÉES ---
+        // --- 2. AUTHENTIFICATION, CHARGEMENT, ET RENDU (Déclarées globalement) ---
         
-        async function loadData() {
-            try {
-                let { data: res } = await supabase.from('reservations').select('*');
-                DB_RESERVATIONS = (res || []).map(r => ({ ...r, montant: parseFloat(r.montant) || 0, telephone: r.telephone || '' }));
-                
-                let { data: chg } = await supabase.from('charges').select('*');
-                DB_CHARGES = chg || [];
-
-                let { data: hist } = await supabase.from('historical_data').select('year, months');
-                DB_HISTORICAL_CA = {};
-                (hist || []).forEach(row => {
-                    let monthlyData = row.months;
-                    if (typeof monthlyData === 'string') {
-                        try {
-                            monthlyData = JSON.parse(monthlyData);
-                        } catch(e) {
-                            monthlyData = {};
-                        }
-                    }
-                    DB_HISTORICAL_CA[row.year] = monthlyData || {};
-                });
-
-                renderPlanning();
-                window.updateDashboard(); // Utiliser window. pour garantir l'appel global
-                window.renderChargesList();
-                window.renderCleaningView(); // Utiliser window. pour garantir l'appel global
-
-            } catch (error) {
-                console.error("Erreur critique lors du chargement des données Supabase:", error);
-                window.showToast(`Erreur de chargement de données: ${error.message || 'Problème RLS ou Réseau.'}`, true);
-            }
-        }
-
-        async function initAuth() {
-            const yearSelect = document.getElementById('stats-year');
-            const years = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
-            yearSelect.innerHTML = years.map(y => `<option value="${y}" ${y === CURRENT_YEAR ? 'selected' : ''}>${y}</option>`).join('');
-            
-            const caYearSelect = document.getElementById('ca-year-select');
-            caYearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
-
-            const currentMonth = `${CURRENT_YEAR}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-            document.getElementById('cleaning-month-select').value = currentMonth;
-
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('app-content').style.display = 'block';
-                await loadData(); 
-            }
-        }
-        
-        // Fonctions de login/logout
-        window.handleLogin = async function() {
-            const email = document.getElementById('email').value;
-            const pass = document.getElementById('password').value;
-            const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
-            if (error) document.getElementById('login-msg').style.display = 'block';
-            else location.reload();
-        }
-        window.handleLogout = async function() {
-            await supabase.auth.signOut();
-            location.reload();
-        }
-
-        // --- 3. FONCTIONS DE RENDU PRINCIPALES (Déclarées globalement pour showTab) ---
-
+        // La fonction de rendu doit être déclarée avant son appel dans loadData
         window.updateDashboard = function() {
             const year = parseInt(document.getElementById('stats-year').value);
             const prevYear = year - 1;
 
-            // Filtre : Année sélectionnée et pas bloqué
             const resYear = DB_RESERVATIONS.filter(r => new Date(r.date_debut).getFullYear() === year && !r.nom_client.toUpperCase().includes('BLOQUÉ'));
             const resPrev = DB_RESERVATIONS.filter(r => new Date(r.date_debut).getFullYear() === prevYear && !r.nom_client.toUpperCase().includes('BLOQUÉ'));
 
@@ -651,7 +584,6 @@
             const today = new Date();
             today.setHours(0,0,0,0);
 
-            // Filtre: Réservation se termine dans ce mois ET date de fin >= aujourd'hui
             let tasks = DB_RESERVATIONS.filter(r => {
                 const dFin = new Date(r.date_fin);
                 return dFin >= startMonth && dFin <= endMonth && dFin >= today;
@@ -697,14 +629,149 @@
             });
             container.innerHTML = html;
         }
+        
+        // --- CHARGEMENT DES DONNÉES ---
+        async function loadData() {
+            try {
+                let { data: res } = await supabase.from('reservations').select('*');
+                DB_RESERVATIONS = (res || []).map(r => ({ ...r, montant: parseFloat(r.montant) || 0, telephone: r.telephone || '' }));
+                
+                let { data: chg } = await supabase.from('charges').select('*');
+                DB_CHARGES = chg || [];
 
+                let { data: hist } = await supabase.from('historical_data').select('year, months');
+                DB_HISTORICAL_CA = {};
+                (hist || []).forEach(row => {
+                    let monthlyData = row.months;
+                    if (typeof monthlyData === 'string') {
+                        try { monthlyData = JSON.parse(monthlyData); } catch(e) { monthlyData = {}; }
+                    }
+                    DB_HISTORICAL_CA[row.year] = monthlyData || {};
+                });
+
+                renderPlanning();
+                window.updateDashboard(); // Utilise la fonction déclarée globalement
+                window.renderChargesList(); // Utilise la fonction déclarée globalement
+                window.renderCleaningView(); // Utilise la fonction déclarée globalement
+
+            } catch (error) {
+                console.error("Erreur critique lors du chargement des données Supabase:", error);
+                window.showToast(`Erreur de chargement de données: ${error.message || 'Problème RLS ou Réseau.'}`, true);
+            }
+        }
+        
+        async function initAuth() {
+            const yearSelect = document.getElementById('stats-year');
+            const years = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
+            yearSelect.innerHTML = years.map(y => `<option value="${y}" ${y === CURRENT_YEAR ? 'selected' : ''}>${y}</option>`).join('');
+            
+            const caYearSelect = document.getElementById('ca-year-select');
+            caYearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+            const currentMonth = `${CURRENT_YEAR}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('cleaning-month-select').value = currentMonth;
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                await loadData(); 
+            }
+        }
+
+
+        // --- 4. PLANNING CLASSIQUE (Déjà OK, juste pour la lisibilité) ---
+        function renderPlanning(filterText = '') {
+            const container = document.getElementById('planning-container');
+            const now = new Date();
+            let futureRes = DB_RESERVATIONS.filter(r => new Date(r.date_fin) >= now);
+            if(filterText) {
+                const term = filterText.toLowerCase();
+                futureRes = futureRes.filter(r => r.nom_client && r.nom_client.toLowerCase().includes(term));
+            }
+            futureRes.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
+
+            if(futureRes.length === 0) {
+                container.innerHTML = '<div style="padding:20px; text-align:center;">Aucune réservation future.</div>';
+                return;
+            }
+
+            const weeks = {};
+            futureRes.forEach(r => {
+                const d = new Date(r.date_debut);
+                const wNum = getWeekNumber(d);
+                const year = d.getFullYear();
+                const key = `${year}-W${wNum}`;
+                if(!weeks[key]) {
+                    const startW = getStartOfWeek(d);
+                    const endW = new Date(startW); endW.setDate(endW.getDate()+6);
+                    weeks[key] = { label: `Semaine ${wNum}`, dates: `${formatDateShort(startW)} - ${formatDateShort(endW)}`, trevoux: [], couzon: [] };
+                }
+                weeks[key][r.gite === 'Trévoux' ? 'trevoux' : 'couzon'].push(r);
+            });
+
+            let html = '';
+            for(const [k, w] of Object.entries(weeks)) {
+                html += `
+                <div class="week-container">
+                    <div class="week-title">${w.label} <span style="font-weight:400; opacity:0.8; margin-left:10px;">${w.dates}</span></div>
+                    <div class="week-grid">
+                        <div class="day-column">
+                            ${w.trevoux.map(r => createResCard(r)).join('')}
+                        </div>
+                        <div class="day-column">
+                            ${w.couzon.map(r => createResCard(r)).join('')}
+                        </div>
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        // --- 5. UTILS & HELPERS (Fonctions appelées dans les rendus) ---
+
+        function createResCard(r) {
+            const platformLower = r.plateforme ? r.plateforme.toLowerCase() : 'autre';
+            let platformColor;
+            if (platformLower.includes('airbnb')) platformColor = 'var(--airbnb)';
+            else if (platformLower.includes('abritel') || platformLower.includes('homeway')) platformColor = 'var(--abritel)';
+            else if (platformLower.includes('gite') || platformLower.includes('gîtes')) platformColor = 'var(--gites)';
+            else platformColor = 'var(--gites)'; 
+            
+            const dEnd = new Date(r.date_fin);
+            const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            
+            const isChaining = isChainingDay(r.date_fin, r.gite);
+            const finishTime = getCleaningTime(r.date_fin, r.gite, isChaining);
+            const menageStr = `🧹 ${days[dEnd.getDay()]} ${dEnd.getDate()} - Prêt avant ${finishTime.split('(')[0]}`;
+
+            const isBlocked = r.nom_client && r.nom_client.toUpperCase().includes('BLOQUÉ');
+
+            const safeName = r.nom_client ? r.nom_client.replace(/'/g, "\\'") : 'Client';
+            const safePhone = r.telephone ? r.telephone.replace(/'/g, "\\'") : '';
+            const resId = r.id;
+
+            return `
+            <div class="res-card ${isBlocked ? 'blocked' : ''}">
+                <div class="actions">
+                    <i class="fas fa-pen" style="cursor:pointer; color:#3498db;" onclick="openEdit(${resId}, '${safeName}', ${r.montant}, '${safePhone}')"></i>
+                    <i class="fas fa-trash" style="cursor:pointer; color:#e74c3c;" onclick="deleteRes(${resId})"></i>
+                </div>
+                <div class="client">${isBlocked ? '<i class="fas fa-ban"></i> ' : ''}${r.nom_client}</div>
+                <div class="dates"><i class="far fa-calendar"></i> ${formatDate(r.date_debut)} ➝ ${formatDate(r.date_fin)}</div>
+                ${r.telephone ? `<div class="phone"><i class="fas fa-phone"></i> ${r.telephone}</div>` : ''}
+                <div class="price">💰 ${Number(r.montant).toFixed(2)} €</div>
+                <div class="menage-info">${menageStr}</div>
+                <span class="platform-badge" style="background:${platformColor}">${r.plateforme}</span>
+            </div>`;
+        }
+        
         function createCleaningCard(r) {
             const dEnd = new Date(r.date_fin);
             const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
             const isChaining = isChainingDay(r.date_fin, r.gite);
             const finishTime = getCleaningTime(r.date_fin, r.gite, isChaining);
             
-            // Statut de validation (Placeholder car nous n'avons pas la table `cleaning_validation` complète ici)
             const validationStatus = "A Faire"; 
             const statusClass = 'status-attente';
 
@@ -719,8 +786,6 @@
             </div>`;
         }
 
-        // --- 4. FONCTIONS UTILES (Rappel pour ne pas casser) ---
-        
         function getCleaningTime(departureDate, gite, isChaining) {
             const date = new Date(departureDate);
             const dayOfWeek = date.getDay(); 
@@ -777,6 +842,10 @@
         function getDuration(s, e) {
             return (new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24);
         }
+        function formatDateShort(d) { 
+            const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+            return `${d.getDate()} ${MONTHS[d.getMonth()].toLowerCase().substring(0, 3)}.`; 
+        }
         function showToast(msg, isError = false) { 
             const t=document.getElementById('toast'); 
             t.innerText=msg; 
@@ -797,7 +866,44 @@
         function exportCleaningCSV() { showToast("L'exportation CSV sera lancée."); }
         function openValidationForm() { showToast("Lien de partage sera généré."); }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        
+        async function saveEdit() {
+            const id = document.getElementById('edit-id').value;
+            const updates = {
+                nom_client: document.getElementById('edit-name').value,
+                montant: parseFloat(document.getElementById('edit-amount').value),
+                telephone: document.getElementById('edit-phone').value 
+            };
+            const { error } = await supabase.from('reservations').update(updates).eq('id', id);
+            if (error) { console.error(error); showToast("Erreur de sauvegarde", true); }
+            else { closeModal('editModal'); loadData(); showToast('Modifié avec succès'); }
+        }
+        async function deleteRes(id) {
+            if(confirm('Supprimer cette réservation ?')) {
+                const { error } = await supabase.from('reservations').delete().eq('id', id);
+                if (error) { console.error(error); showToast("Erreur de suppression", true); }
+                else { loadData(); showToast('Supprimé avec succès'); }
+            }
+        }
+        function openEdit(id, name, amount, phone) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-amount').value = amount;
+            document.getElementById('edit-phone').value = phone;
+            document.getElementById('editModal').style.display = 'flex';
+        }
 
+        // Helpers de navigation
+        function showTab(id, btn) {
+            document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+            document.getElementById('tab-'+id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            // Ces fonctions sont maintenant déclarées globalement avec window. (ou dans le scope parent)
+            if(id === 'statistiques') window.updateDashboard(); 
+            if(id === 'menage') window.renderCleaningView(); 
+            if(id === 'charges') window.renderChargesList();
+        }
 
         // Init: Appel l'authentification au chargement de la fenêtre
         window.onload = initAuth;
