@@ -1,0 +1,255 @@
+<style>
+    /* Styles spécifiques pour le tableau de bord Ménage */
+    .menage-container { padding: 10px; }
+    .menage-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    
+    .cleaning-list { list-style: none; padding: 0; }
+    .cleaning-item {
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+    }
+    
+    /* Styles de Statut (Rouge/Vert) */
+    .status-indicator {
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 0.9em;
+    }
+    .status-attente { /* Non validé / À Valider */
+        background-color: var(--danger); /* Rouge */
+        color: white;
+    }
+    .status-valide { /* Validé */
+        background-color: var(--success); /* Vert */
+        color: white;
+    }
+    .status-propose { /* Proposé / En attente d'action */
+        background-color: var(--warning); /* Jaune/Orange */
+        color: #333;
+    }
+
+    .details { flex-grow: 1; }
+    .date { font-weight: bold; color: var(--primary); }
+
+    .week-planning-container {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+    .week-title-bar {
+        background: var(--secondary);
+        color: white;
+        padding: 10px 15px;
+        font-weight: 600;
+    }
+    .week-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+    .gite-column {
+        padding: 15px;
+    }
+    .gite-column:first-child {
+        border-right: 1px solid #eee;
+        background: var(--kpi-trevoux); /* Fond clair pour Trévoux */
+    }
+    .gite-column:last-child {
+        background: var(--kpi-couzon); /* Fond clair pour Couzon */
+    }
+    .gite-column h4 { margin-top: 0; padding-bottom: 5px; border-bottom: 1px solid #ccc; }
+
+</style>
+
+<div class="menage-container">
+    <div class="menage-header">
+        <div style="background:var(--bg-body); padding:5px 15px; border-radius:20px; border:1px solid #ddd;">
+            📅 **Mois :** <input type="month" id="cleaning-month-select" onchange="renderCleaningView()" style="border:none; font-weight:bold; font-size:1rem; outline:none; background:transparent;">
+        </div>
+        
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-success" onclick="openValidationForm()" style="font-size: 0.9rem;"><i class="fas fa-external-link-alt"></i> Partager Planning</button>
+            <button class="btn btn-primary" onclick="exportCleaningCSV()" style="font-size: 0.9rem;"><i class="fas fa-file-csv"></i> Exporter CSV</button>
+        </div>
+    </div>
+    
+    <div id="cleaning-planning-container">
+        <div style="text-align:center; padding:20px; color: #7f8c8d;">Sélectionnez un mois ou le planning se chargera après la synchronisation.</div>
+    </div>
+
+    <p style="font-size:0.8rem; color:#7f8c9d; margin-top:20px; border-top:1px solid #eee; padding-top:10px;">
+        **Légende :** Les dates antérieures à aujourd'hui sont masquées. Vert = Validé, Rouge = Non Validé.
+    </p>
+</div>
+
+<script>
+    // Variables globales depuis l'index (doivent être définies dans index.html)
+    // const supabase = ...
+    // let DB_RESERVATIONS = ...
+    // let CURRENT_CLEANING_TASKS = []; 
+    // const MONTHS = ...
+
+    // --- Fonctions utilitaires (doivent être copiées de l'index si non globales) ---
+    // Note: Certaines fonctions comme isChainingDay, getCleaningTime, getWeekNumber, etc. sont nécessaires et doivent exister.
+    
+    /**
+     * Détermine le statut et la classe CSS pour l'affichage couleur (Vert/Rouge)
+     */
+    function getStatusDisplay(menageValide) {
+        if (!menageValide) {
+            return { text: 'Non Validé', className: 'status-attente' }; // Rouge
+        }
+        if (menageValide.includes('Validé')) {
+            return { text: menageValide, className: 'status-valide' }; // Vert
+        }
+        if (menageValide.includes('Proposé')) {
+            return { text: menageValide, className: 'status-propose' }; // Jaune
+        }
+        return { text: menageValide, className: 'status-propose' };
+    }
+
+    /**
+     * Génère la carte détaillée pour une tâche de ménage
+     */
+    function createCleaningCard(r) {
+        const departureDate = new Date(r.date_fin);
+        const isChaining = window.isChainingDay(r.date_fin, r.gite);
+        const finishTime = window.getCleaningTime(r.date_fin, r.gite, isChaining);
+        const dayOfWeek = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][departureDate.getDay()];
+        
+        const status = getStatusDisplay(r.menage_valide); // Utilisation du nouveau statut
+
+        let cardBg = 'background:white;';
+        if (isChaining) cardBg = 'background:#fff8eb; border:2px solid var(--accent);';
+        
+        return `
+        <div style="border-radius:8px; padding:15px; margin-bottom:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); ${cardBg}">
+            <div style="font-weight:700; font-size:1.1rem; color:var(--primary); margin-bottom:8px;">
+                🧹 ${dayOfWeek} ${window.formatDate(r.date_fin)}
+            </div>
+            
+            <div style="font-size:0.9rem; color:#7f8c8d; margin-bottom:10px;">
+                <i class="fas fa-calendar-alt"></i> Séjour : ${window.formatDate(r.date_debut)} ➝ ${window.formatDate(r.date_fin)}
+                <br><i class="fas fa-user-tag"></i> Client : ${r.nom_client}
+            </div>
+
+            <div style="font-weight:bold; color:var(--success); font-size:1.2rem; border-top:1px solid #eee; padding-top:8px;">
+                <i class="fas fa-clock"></i> Prêt avant : ${finishTime}
+            </div>
+            <div class="status-indicator ${status.className}" style="margin-top:5px;">
+                <i class="fas fa-check-circle" style="font-size:0.8rem;"></i> ${status.text}
+            </div>
+        </div>`;
+    }
+
+    /**
+     * Fonction principale de rendu du planning ménage (appelée par l'index)
+     */
+    function renderCleaningView() {
+        // Cette fonction s'exécute dans le contexte de l'index, elle peut accéder aux globales.
+        if (typeof DB_RESERVATIONS === 'undefined' || DB_RESERVATIONS.length === 0) {
+            document.getElementById('cleaning-planning-container').innerHTML = '<div style="color:#999; padding:10px;">Chargement des données...</div>';
+            return;
+        }
+
+        const container = document.getElementById('cleaning-planning-container');
+        const monthSelect = document.getElementById('cleaning-month-select').value;
+        
+        if (!monthSelect) return;
+
+        const targetYear = parseInt(monthSelect.substring(0, 4));
+        const targetMonth = parseInt(monthSelect.substring(5, 7)) - 1;
+        
+        const startOfMonth = new Date(targetYear, targetMonth, 1);
+        const endOfMonth = new Date(targetYear, targetMonth + 1, 0); 
+
+        // Calcul de la date d'aujourd'hui à minuit pour le filtre temporel
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayMs = today.getTime();
+
+        let cleaningTasks = DB_RESERVATIONS.filter(r => {
+            const endDate = new Date(r.date_fin);
+            const endDateMs = endDate.getTime();
+            
+            // Filtre 1 : Dans le mois sélectionné
+            const inMonth = endDate >= startOfMonth && endDate <= endOfMonth;
+            
+            // Filtre 2 (CLÉ) : La date de fin doit être >= Aujourd'hui
+            const isFuture = endDateMs >= todayMs; 
+
+            return inMonth && isFuture;
+        });
+        
+        if (cleaningTasks.length === 0) {
+            container.innerHTML = '<div style="color:#999; padding:10px;">Aucun ménage en attente ou futur pour ce mois.</div>';
+            window.CURRENT_CLEANING_TASKS = [];
+            return;
+        }
+
+        cleaningTasks.sort((a, b) => new Date(a.date_fin) - new Date(b.date_fin));
+        window.CURRENT_CLEANING_TASKS = cleaningTasks; 
+        
+        // Regroupe les tâches par semaine
+        const weeks = {};
+        cleaningTasks.forEach(r => {
+            const d = new Date(r.date_fin);
+            const wNum = window.getWeekNumber(d);
+            const year = d.getFullYear();
+            const key = `${year}-W${wNum}`;
+            
+            if (!weeks[key]) {
+                const startW = window.getStartOfWeek(d);
+                const endW = new Date(startW); endW.setDate(endW.getDate() + 6);
+                weeks[key] = { 
+                    wNum, 
+                    label: `Semaine ${wNum}`, 
+                    dates: `${window.formatDateShort(startW)} - ${window.formatDateShort(endW)}`, 
+                    trevoux: [], 
+                    couzon: [] 
+                };
+            }
+            
+            const giteKey = r.gite === 'Trévoux' ? 'trevoux' : 'couzon';
+            weeks[key][giteKey].push(r);
+        });
+
+        // Génération du HTML par semaine et 2 colonnes
+        let html = '';
+        for (const [k, w] of Object.entries(weeks)) {
+            html += `
+            <div class="week-planning-container">
+                <div class="week-title-bar">
+                    ${w.label} <span style="font-weight:400; opacity:0.8; margin-left:10px;">${w.dates}</span>
+                </div>
+                <div class="week-grid">
+                    <div class="gite-column">
+                        <h4 style="color:var(--trevoux);">Trévoux (${w.trevoux.length} ménages)</h4>
+                        ${w.trevoux.map(r => createCleaningCard(r)).join('')}
+                    </div>
+                    <div class="gite-column">
+                        <h4 style="color:var(--couzon);">Couzon (${w.couzon.length} ménages)</h4>
+                        ${w.couzon.map(r => createCleaningCard(r)).join('')}
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // Le reste des fonctions (openValidationForm, exportCleaningCSV, etc.) doit être copié ici
+    // ou être défini dans le contexte global de l'index.
+    
+    // Pour cet exemple, on suppose que openValidationForm et exportCleaningCSV sont dans l'index global
+    
+</script>
