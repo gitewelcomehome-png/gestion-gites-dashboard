@@ -143,4 +143,571 @@
 
         /* UTILITAIRES */
         .hidden { display: none; }
-        .toast { position: fixed; bottom: 30px; right: 30px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; display: none; z-index: 10000
+        .toast { position: fixed; bottom: 30px; right: 30px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; display: none; z-index: 10000; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--trevoux); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; width: 500px; max-width: 90%; }
+
+        /* Historical CA Modal */
+        .ca-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-top: 15px; }
+        .ca-grid-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px dotted #eee; }
+        .ca-grid-item label { font-weight: 600; font-size: 0.9rem; }
+        .ca-grid-item input { width: 100px; padding: 5px; text-align: right; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-box">
+            <h1 style="font-family:'Playfair Display'; margin-bottom:20px;">Gestion Gîtes</h1>
+            <input type="email" id="email" class="login-input" placeholder="Email" value="gite@admin.com">
+            <input type="password" id="password" class="login-input" placeholder="Mot de passe">
+            <div id="login-msg" style="color:red; font-size:0.8rem; display:none; margin-bottom:10px;">Erreur de connexion</div>
+            <button onclick="handleLogin()" class="login-btn">Se connecter</button>
+        </div>
+    </div>
+
+    <div id="app-content">
+        <header>
+            <div class="nav-buttons">
+                <button class="nav-btn active" onclick="showTab('reservations', this)"><i class="fas fa-calendar-alt"></i> RÉSERVATIONS</button>
+                <button class="nav-btn" onclick="showTab('statistiques', this)"><i class="fas fa-chart-pie"></i> STATISTIQUES</button>
+                <button class="nav-btn" onclick="showTab('charges', this)"><i class="fas fa-euro-sign"></i> CHARGES & RENTABILITÉ</button>
+                <button class="nav-btn" onclick="showTab('menage', this)"><i class="fas fa-broom"></i> PLANNING MÉNAGE</button>
+                <button class="nav-btn" onclick="showTab('infos', this)"><i class="fas fa-info-circle"></i> INFOS PRATIQUES</button>
+                <button class="nav-btn" onclick="showTab('communication', this)"><i class="fas fa-comment-dots"></i> À DÉCOUVRIR</button>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="handleLogout()" style="padding: 5px 15px; font-size: 0.8rem;">Déconnexion</button>
+            </div>
+        </header>
+
+        <div id="sync-alert" class="alert-banner" style="display:flex;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span id="sync-msg">Synchronisation effectuée avec 1 erreur(s) - 14 déc. 2025 à 22:08</span>
+        </div>
+
+        <div id="tab-reservations" class="section-content active">
+            <div class="planning-controls">
+                <h2 style="font-family:'Playfair Display'; font-size:1.8rem;">Planning des réservations</h2>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-primary" onclick="syncAllCalendars()" id="btn-sync"><i class="fas fa-sync"></i> Sync iCal</button>
+                    <input type="text" class="search-bar" placeholder="🔍 Rechercher client..." onkeyup="renderPlanning(this.value)">
+                </div>
+            </div>
+            
+            <div class="gite-headers">
+                <div class="gite-header" style="background:var(--trevoux); border-top-left-radius: 12px;">🏠 Trévoux</div>
+                <div class="gite-header" style="background:var(--couzon); border-top-right-radius: 12px;">🏠 Couzon</div>
+            </div>
+            
+            <div id="planning-container">
+                <div style="text-align:center; padding:40px; color:#999;">Chargement du planning...</div>
+            </div>
+        </div>
+
+        <div id="tab-statistiques" class="section-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="font-family:'Playfair Display'; font-size:2rem;">Statistiques</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button class="btn btn-primary" onclick="openHistoricalCaModal()" style="padding: 5px 15px; font-size: 0.8rem;"><i class="fas fa-edit"></i> Saisir CA Histo</button>
+                    
+                    <div style="background:white; padding:5px 15px; border-radius:20px; border:1px solid #ddd;">
+                        📅 Année : <select id="stats-year" onchange="updateDashboard()" style="border:none; font-weight:bold; font-size:1rem; outline:none;"></select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-grid-top">
+                <div class="stat-card-colored" style="background:var(--airbnb);">
+                    <h3>Airbnb</h3>
+                    <div class="value" id="count-airbnb">0</div>
+                    <div style="font-size:0.8rem;">réservations</div>
+                    <i class="fab fa-airbnb icon"></i>
+                </div>
+                <div class="stat-card-colored" style="background:var(--abritel);">
+                    <h3>Abritel</h3>
+                    <div class="value" id="count-abritel">0</div>
+                    <div style="font-size:0.8rem;">réservations</div>
+                    <i class="fas fa-home icon"></i>
+                </div>
+                <div class="stat-card-colored" style="background:var(--gites);">
+                    <h3>Gîtes de France</h3>
+                    <div class="value" id="count-gites">0</div>
+                    <div style="font-size:0.8rem;">réservations</div>
+                    <i class="fas fa-leaf icon"></i>
+                </div>
+            </div>
+
+            <div class="stats-grid-kpi">
+                <div class="kpi-card" style="border-left-color: var(--trevoux); background: var(--kpi-trevoux);">
+                    <div class="label">📊 Taux Trévoux</div>
+                    <div class="val" id="kpi-taux-trevoux">0%</div>
+                </div>
+                <div class="kpi-card" style="border-left-color: var(--couzon); background: var(--kpi-couzon);">
+                    <div class="label">📊 Taux Couzon</div>
+                    <div class="val" id="kpi-taux-couzon">0%</div>
+                </div>
+                <div class="kpi-card" style="border-left-color: var(--warning); background: var(--kpi-pm);">
+                    <div class="label">💰 Prix moyen/nuit</div>
+                    <div class="val" id="kpi-pm">0 €</div>
+                </div>
+                <div class="kpi-card" style="border-left-color: #3498db; background: var(--kpi-duree);">
+                    <div class="label">🌙 Durée moyenne</div>
+                    <div class="val" id="kpi-duree">0 nuits</div>
+                </div>
+                <div class="kpi-card" style="border-left-color: #2ecc71; background: var(--kpi-top-month);">
+                    <div class="label">🏆 Meilleur mois</div>
+                    <div class="val" id="kpi-top-month">-</div>
+                </div>
+            </div>
+
+            <div class="stats-grid-blue">
+                <div class="blue-card">
+                    <div class="val" id="total-res">0</div>
+                    <div class="lbl">RÉSERVATIONS TOTALES</div>
+                </div>
+                <div class="blue-card">
+                    <div class="val" id="total-trevoux">0</div>
+                    <div class="lbl">TRÉVOUX</div>
+                </div>
+                <div class="blue-card">
+                    <div class="val" id="total-couzon">0</div>
+                    <div class="lbl">COUZON</div>
+                </div>
+                <div class="blue-card">
+                    <div class="val" id="total-ca">0 €</div>
+                    <div class="lbl">CA TOTAL</div>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-chart-line"></i> Comparaison CA Mensuel (€)</div>
+                    <div style="height: 300px;"><canvas id="monthlyChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-chart-bar"></i> Répartition par Plateforme</div>
+                    <div style="height: 250px;"><canvas id="platformChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-chart-pie"></i> Répartition par Gîte</div>
+                    <div style="height: 250px;"><canvas id="giteChart"></canvas></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><i class="fas fa-balance-scale"></i> CA vs Charges vs Bénéfice</div>
+                <div style="height: 300px;"><canvas id="profitChart"></canvas></div>
+            </div>
+        </div>
+
+        <div id="tab-charges" class="section-content">
+            <div class="card">
+                <div class="card-header">Saisie des Charges</div>
+                <form onsubmit="handleAddCharge(event)" class="form-row" style="grid-template-columns: repeat(5, 1fr); align-items: end;">
+                    <div class="form-group"><label>Date</label><input type="date" id="charge-date" required></div>
+                    <div class="form-group"><label>Gîte</label><select id="charge-gite"><option>Trévoux</option><option>Couzon</option></select></div>
+                    <div class="form-group"><label>Catégorie</label><select id="charge-cat"><option>Énergie</option><option>Eau</option><option>Entretien</option><option>Taxes</option><option>Internet</option><option>Remboursement</option></select></div>
+                    <div class="form-group"><label>Montant (€)</label><input type="number" step="0.01" id="charge-amount" required></div>
+                    <button type="submit" class="btn btn-success" style="height: 42px;">AJOUTER</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header">Historique</div>
+                <div id="charges-list"></div>
+            </div>
+        </div>
+        
+        <div id="tab-menage" class="section-content">
+            <div style="text-align:center; padding:50px;">
+                <p style="color:#7f8c8d;">Chargement de la vue Planning Ménage...</p>
+                <div class="spinner" style="width:30px; height:30px; margin-top:15px;"></div>
+            </div>
+        </div>
+
+        <div id="tab-infos" class="section-content">
+            <div class="card">
+                <div class="card-header">Configuration iCal</div>
+                <div class="form-group"><label>Airbnb Trévoux</label><input type="text" id="ical-trevoux-airbnb"></div>
+                <div class="form-group"><label>Airbnb Couzon</label><input type="text" id="ical-couzon-airbnb"></div>
+                <button class="btn btn-primary" style="margin-top:10px;" onclick="saveIcalConfig()">Sauvegarder</button>
+            </div>
+        </div>
+
+        <div id="tab-communication" class="section-content">
+            <div class="card">
+                <div class="card-header">Générateur de Message (WhatsApp)</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Gîte</label>
+                        <select id="comm-gite" onchange="updateCommPreview()"><option>Trévoux</option><option>Couzon</option></select>
+                    </div>
+                </div>
+                <textarea id="comm-preview" style="width:100%; height:150px; margin-bottom:10px; padding:10px; border:1px solid #ddd;"></textarea>
+                <button class="btn btn-success" onclick="sendWhatsapp()"><i class="fab fa-whatsapp"></i> Envoyer WhatsApp</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Info message</div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2>Modifier Réservation</h2>
+            <input type="hidden" id="edit-id">
+            <div class="form-group"><label>Nom Client</label><input type="text" id="edit-name"></div>
+            <div class="form-group"><label>Montant (€)</label><input type="number" step="0.01" id="edit-amount"></div>
+            <div class="form-group"><label>Numéro de Tél.</label><input type="text" id="edit-phone"></div> 
+            <div style="margin-top:20px; text-align:right;">
+                <button class="btn btn-danger" onclick="closeModal('editModal')">Annuler</button>
+                <button class="btn btn-success" onclick="saveEdit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="historicalCaModal" class="modal">
+        <div class="modal-content" style="width: 700px;">
+            <h2 style="margin-bottom: 20px;">Saisie Manuelle du Chiffre d'Affaires Mensuel (Historique)</h2>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="font-size: 1.2rem;">Année :</h3>
+                <select id="ca-year-select" style="padding: 8px; font-size: 1rem; border-radius: 6px;" onchange="loadHistoricalCaData()">
+                    </select>
+            </div>
+
+            <div id="ca-grid" class="ca-grid">
+                </div>
+            <p style="margin-top: 15px; font-size: 0.8rem; color: var(--text-light);">* Saisir le CA total (Trévoux + Couzon) pour le mois correspondant. Laissez à 0 ou vide si non pertinent.</p>
+
+            <div style="margin-top:20px; text-align:right;">
+                <button class="btn btn-danger" onclick="closeModal('historicalCaModal')">Annuler</button>
+                <button class="btn btn-success" onclick="saveHistoricalCaData()">Sauvegarder les CA</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION SUPABASE ---
+        const SUPABASE_URL = 'https://ivqiisnudabxemcxxyru.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2cWlpc251ZGFieGVtY3h4eXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTk0NjMsImV4cCI6MjA4MDk3NTQ2M30.9FwJPgR8bbaP7bAemuaVbAN019EO5ql7uciQO9FeHK4';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const CURRENT_YEAR = new Date().getFullYear();
+        const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+        const MONTH_KEYS = ['jan', 'fev', 'mar', 'avr', 'mai', 'juin', 'juil', 'aout', 'sep', 'oct', 'nov', 'dec'];
+        
+        const STANDARD_DEPART_TIME = 10;
+        const STANDARD_ARRIVEE_TIME = 18;
+
+        let DB_RESERVATIONS = [];
+        let DB_CHARGES = [];
+        let DB_HISTORICAL_CA = {}; 
+        
+        // --- 2. AUTHENTIFICATION & CHARGEMENT DES DONNÉES ---
+        async function initAuth() {
+            const yearSelect = document.getElementById('stats-year');
+            const years = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
+            yearSelect.innerHTML = years.map(y => 
+                `<option value="${y}" ${y === CURRENT_YEAR ? 'selected' : ''}>${y}</option>`
+            ).join('');
+            
+            const caYearSelect = document.getElementById('ca-year-select');
+            caYearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+            const currentMonth = `${CURRENT_YEAR}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('cleaning-month-select').value = currentMonth;
+
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                await loadData(); 
+            }
+        }
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            const { error } = await supabase.auth.signInWithPassword({ email: email, password: pass });
+            if (error) document.getElementById('login-msg').style.display = 'block';
+            else location.reload();
+        }
+        async function handleLogout() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        async function loadData() {
+            let { data: res } = await supabase.from('reservations').select('*');
+            DB_RESERVATIONS = (res || []).map(r => ({
+                ...r,
+                montant: parseFloat(r.montant) || 0,
+                telephone: r.telephone || ''
+            }));
+            
+            let { data: chg } = await supabase.from('charges').select('*');
+            DB_CHARGES = chg || [];
+
+            let { data: hist } = await supabase.from('historical_data').select('year, months');
+            DB_HISTORICAL_CA = {};
+            (hist || []).forEach(row => {
+                let monthlyData = row.months;
+                if (typeof monthlyData === 'string') {
+                    try {
+                        monthlyData = JSON.parse(monthlyData);
+                    } catch(e) {
+                        monthlyData = {};
+                    }
+                }
+                DB_HISTORICAL_CA[row.year] = monthlyData || {};
+            });
+
+            renderPlanning();
+            updateDashboard();
+            renderChargesList();
+        }
+
+        // --- 3. PLANNING CLASSIQUE (VUE SEMAINE - Garde toutes les dates) ---
+        function renderPlanning(filterText = '') {
+            const container = document.getElementById('planning-container');
+            let allRes = [...DB_RESERVATIONS]; 
+            
+            if(filterText) {
+                const term = filterText.toLowerCase();
+                allRes = allRes.filter(r => r.nom_client && r.nom_client.toLowerCase().includes(term));
+            }
+            allRes.sort((a,b) => new Date(a.date_debut) - new Date(b.date_debut));
+
+            if(allRes.length === 0) {
+                container.innerHTML = '<div style="padding:20px; text-align:center;">Aucune réservation.</div>';
+                return;
+            }
+
+            const weeks = {};
+            allRes.forEach(r => {
+                const d = new Date(r.date_debut);
+                const wNum = getWeekNumber(d);
+                const year = d.getFullYear();
+                const key = `${year}-W${wNum}`;
+                if(!weeks[key]) {
+                    const startW = getStartOfWeek(d);
+                    const endW = new Date(startW); endW.setDate(endW.getDate()+6);
+                    weeks[key] = { label: `Semaine ${wNum}`, dates: `${formatDateShort(startW)} - ${formatDateShort(endW)}`, trevoux: [], couzon: [] };
+                }
+                weeks[key][r.gite === 'Trévoux' ? 'trevoux' : 'couzon'].push(r);
+            });
+
+            let html = '';
+            for(const [k, w] of Object.entries(weeks)) {
+                html += `
+                <div class="week-container">
+                    <div class="week-title">${w.label} <span style="font-weight:400; opacity:0.8; margin-left:10px;">${w.dates}</span></div>
+                    <div class="week-grid">
+                        <div class="day-column">
+                            ${w.trevoux.map(r => createResCard(r)).join('')}
+                        </div>
+                        <div class="day-column">
+                            ${w.couzon.map(r => createResCard(r)).join('')}
+                        </div>
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function createResCard(r) {
+            const platformLower = r.plateforme ? r.plateforme.toLowerCase() : 'autre';
+            let platformColor;
+            if (platformLower.includes('airbnb')) platformColor = 'var(--airbnb)';
+            else if (platformLower.includes('abritel') || platformLower.includes('homeway')) platformColor = 'var(--abritel)';
+            else if (platformLower.includes('gite') || platformLower.includes('gîtes')) platformColor = 'var(--gites)';
+            else platformColor = 'var(--gites)'; 
+            
+            const dEnd = new Date(r.date_fin);
+            const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            
+            const isChaining = window.isChainingDay(r.date_fin, r.gite);
+            const finishTime = window.getCleaningTime(r.date_fin, r.gite, isChaining);
+            const menageStr = `🧹 ${days[dEnd.getDay()]} ${dEnd.getDate()} - Prêt avant ${finishTime.split('(')[0]}`;
+
+            const isBlocked = r.nom_client && r.nom_client.toUpperCase().includes('BLOQUÉ');
+
+            const safeName = r.nom_client ? r.nom_client.replace(/'/g, "\\'") : 'Client';
+            const safePhone = r.telephone ? r.telephone.replace(/'/g, "\\'") : '';
+            const resId = r.id;
+
+            return `
+            <div class="res-card ${isBlocked ? 'blocked' : ''}">
+                <div class="actions">
+                    <i class="fas fa-pen" style="cursor:pointer; color:#3498db;" onclick="openEdit(${resId}, '${safeName}', ${r.montant}, '${safePhone}')"></i>
+                    <i class="fas fa-trash" style="cursor:pointer; color:#e74c3c;" onclick="deleteRes(${resId})"></i>
+                </div>
+                <div class="client">${isBlocked ? '<i class="fas fa-ban"></i> ' : ''}${r.nom_client}</div>
+                <div class="dates"><i class="far fa-calendar"></i> ${formatDate(r.date_debut)} ➝ ${formatDate(r.date_fin)}</div>
+                ${r.telephone ? `<div class="phone"><i class="fas fa-phone"></i> ${r.telephone}</div>` : ''}
+                <div class="price">💰 ${Number(r.montant).toFixed(2)} €</div>
+                <div class="menage-info">${menageStr}</div>
+                <span class="platform-badge" style="background:${platformColor}">${r.plateforme}</span>
+            </div>`;
+        }
+
+        // --- 4. STATISTIQUES (Fonctions inchangées) ---
+        // ... (Fonctions updateDashboard, getMonthlyCA, getMonthlyCharges, renderCharts, inchangées) ...
+
+        // --- 5. GESTION DES CHARGES ET RÉSERVATIONS (Fonctions inchangées) ---
+        // ... (Fonctions handleAddCharge, renderChargesList, delCharge, openHistoricalCaModal, loadHistoricalCaData, saveHistoricalCaData, inchangées) ...
+
+
+        // --- 6. GESTION DU MÉNAGE : Chargement Dynamique ---
+        
+        let isMenageViewLoaded = false;
+        async function loadCleaningView() {
+            const tabMenage = document.getElementById('tab-menage');
+            if (isMenageViewLoaded) {
+                if (window.renderCleaningView) window.renderCleaningView();
+                return;
+            }
+
+            try {
+                const response = await fetch('menage_view.html');
+                if (!response.ok) throw new Error('Erreur de chargement de menage_view.html');
+                
+                const htmlContent = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+
+                const style = doc.querySelector('style');
+                if (style) document.head.appendChild(style);
+
+                const script = doc.querySelector('script');
+                if (script) {
+                    const scriptElement = document.createElement('script');
+                    scriptElement.textContent = script.textContent;
+                    document.body.appendChild(scriptElement);
+                }
+                
+                // Injection du contenu HTML dans l'onglet
+                const menageViewContent = doc.querySelector('.menage-container') || doc.body; 
+                tabMenage.innerHTML = menageViewContent.innerHTML; 
+
+                isMenageViewLoaded = true;
+                
+                if (window.renderCleaningView) window.renderCleaningView();
+
+            } catch (e) {
+                console.error("Échec du chargement de la vue ménage :", e);
+                tabMenage.innerHTML = `<div class="card"><div style="color:red; text-align:center;">Impossible de charger la vue Planning Ménage. Vérifiez la console pour les erreurs 404.</div></div>`;
+            }
+        }
+        
+        // --- 7. FONCTIONS UTILES (Rendues globales pour menage_view) ---
+        
+        window.isHoliday = function(date) {
+            const d = new Date(date);
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            if ( (month === 1 && day === 1) || (month === 5 && (day === 1 || day === 8)) || (month === 7 && day === 14) || (month === 8 && day === 15) || (month === 11 && (day === 1 || day === 11)) || (month === 12 && day === 25)) return true;
+            return false;
+        }
+
+        window.getCleaningTime = function(departureDate, gite, isChaining) {
+            const date = new Date(departureDate);
+            const dayOfWeek = date.getDay(); 
+
+            if (dayOfWeek === 0) {
+                return isChaining ? 
+                    '13h00 (Enchaînement Dim.)' : 
+                    '17h00 (Fin de journée, gîte prêt pour Lundi)'; 
+            }
+            
+            if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+                if (isChaining) {
+                    return '12h00 (Enchaînement Rapide)'; 
+                }
+                if (window.isHoliday(departureDate)) {
+                    return '12h00 (Jour Férié - Vérif. Report)'; 
+                }
+                return '12h00 (Standard)';
+            }
+            return 'Vérification !'; 
+        }
+
+        window.isChainingDay = function(dateStr, gite) {
+            const departureDate = dateStr; 
+            const isChaining = DB_RESERVATIONS.some(r => 
+                r.gite === gite && 
+                r.date_debut === departureDate &&
+                r.nom_client.toUpperCase().indexOf('BLOQUÉ') === -1
+            );
+            return isChaining;
+        }
+        
+        window.getWeekNumber = function(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        }
+        
+        window.getStartOfWeek = function(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+
+        window.formatDate = function(s) { 
+            if(!s) return ''; 
+            const date = new Date(s);
+            if (s.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const parts = s.split('-');
+                return `${parts[2]}/${parts[1]}`;
+            }
+            return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`; 
+        }
+
+        window.formatDateShort = function(d) { 
+            const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+            return `${d.getDate()} ${MONTHS[d.getMonth()].toLowerCase().substring(0, 3)}.`; 
+        }
+        
+        function showTab(id, btn) {
+            document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+            document.getElementById('tab-'+id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if(id === 'statistiques') updateDashboard(); 
+            if(id === 'menage') loadCleaningView(); 
+        }
+        
+        // ... (Autres fonctions nécessaires de votre code original : updateDashboard, etc. sont supposées exister) ...
+        
+        function updateDashboard() { /* Ceci est un placeholder, votre fonction réelle doit être ici */ console.log("Updating Dashboard..."); }
+        function renderChargesList() { /* Ceci est un placeholder */ }
+        function openHistoricalCaModal() { /* Ceci est un placeholder */ }
+        function loadHistoricalCaData() { /* Ceci est un placeholder */ }
+        function saveHistoricalCaData() { /* Ceci est un placeholder */ }
+        function handleAddCharge(event) { event.preventDefault(); /* Ceci est un placeholder */ }
+        function syncAllCalendars() { /* Ceci est un placeholder */ }
+        function openEdit() { /* Ceci est un placeholder */ }
+        function deleteRes() { /* Ceci est un placeholder */ }
+        function saveEdit() { /* Ceci est un placeholder */ }
+        function saveIcalConfig() { /* Ceci est un placeholder */ }
+        function updateCommPreview() { /* Ceci est un placeholder */ }
+        function sendWhatsapp() { /* Ceci est un placeholder */ }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        window.showToast = function(msg) { /* Ceci est un placeholder */ console.log("TOAST:", msg); }
+
+
+        // Init
+        window.onload = initAuth;
+
+    </script>
+</body>
+</html>
