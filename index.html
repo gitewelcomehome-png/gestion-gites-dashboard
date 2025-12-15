@@ -667,4 +667,47 @@
         
         let isMenageViewLoaded = false;
         async function loadCleaningView() {
-            const tabMenage =
+            const tabMenage = document.getElementById('tab-menage');
+            if (isMenageViewLoaded) {
+                if (window.renderCleaningView) window.renderCleaningView();
+                return;
+            }
+
+            try {
+                const response = await fetch('menage_view.html');
+                if (!response.ok) throw new Error('Erreur de chargement de menage_view.html');
+                
+                const htmlContent = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+
+                const style = doc.querySelector('style');
+                if (style) document.head.appendChild(style);
+
+                const script = doc.querySelector('script');
+                if (script) {
+                    const scriptElement = document.createElement('script');
+                    scriptElement.textContent = script.textContent;
+                    document.body.appendChild(scriptElement);
+                }
+                
+                const menageViewContent = doc.querySelector('.menage-container') || doc.body; 
+                tabMenage.innerHTML = menageViewContent.innerHTML; 
+
+                isMenageViewLoaded = true;
+                
+                if (window.renderCleaningView) window.renderCleaningView();
+
+            } catch (e) {
+                console.error("Échec du chargement de la vue ménage :", e);
+                tabMenage.innerHTML = `<div class="card"><div style="color:red; text-align:center;">Impossible de charger la vue Planning Ménage. Vérifiez la console pour les erreurs 404.</div></div>`;
+            }
+        }
+        
+        // Init
+        window.onload = initAuth;
+
+    </script>
+</body>
+</html>
