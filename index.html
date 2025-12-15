@@ -75,6 +75,8 @@
     #loginOverlay {position: fixed; inset: 0; background: #0f172a; z-index: 10000; display: flex; justify-content: center; align-items: center;}
     .login-box {background: white; padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);}
     .login-input {width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px;}
+    
+    /* Boutons Validation */
     .btn-validation {padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 0.85rem; cursor: pointer; border: none; transition: all 0.2s;}
     .btn-validation.pending {background: #FFF3E0; color: #F57C00; border: 1px solid #F57C00;}
     .btn-validation.validated {background: #E8F5E9; color: #2E7D32; border: 1px solid #2E7D32;}
@@ -281,6 +283,7 @@
             } else {
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('appContainer').style.display = 'block';
+                await loadCleaningValidations(); // Charger les status avant d'afficher
                 await updateReservationsList();
                 await updateStats();
                 chargerUrlsIcal();
@@ -302,9 +305,8 @@
         }
         async function handleLogout() { await supabase.auth.signOut(); location.reload(); }
 
-        // --- RESERVATIONS (SCHEMA UPDATED) ---
+        // --- RESERVATIONS ---
         async function getAllReservations() {
-            // MAPPING SQL to JS
             const { data, error } = await supabase.from('reservations').select('*').order('date_debut');
             if(error) { console.error(error); return []; }
             return data.map(r => ({
@@ -320,14 +322,58 @@
             }));
         }
 
+        // CALCUL LOGIQUE MENAGE (UTILISÉ PARTOUT)
+        function getMenageInfo(reservation, allReservations) {
+            const departDate = parseLocalDate(reservation.dateFin);
+            let menageDate = new Date(departDate);
+            let heure = '12h00';
+            const departDay = departDate.getDay();
+            
+            // Check enchainement (Arrivée le jour même du départ)
+            const arriveeMemejour = allReservations.find(resa => 
+                resa.gite === reservation.gite && 
+                resa.id !== reservation.id &&
+                parseLocalDate(resa.dateDebut).toDateString() === departDate.toDateString()
+            );
+
+            // Logique
+            if (departDay === 0) { // Dimanche
+                if (!arriveeMemejour) {
+                     menageDate.setDate(menageDate.getDate() + 1); // Report Lundi
+                     const arriveeLundi = allReservations.find(x => x.gite === reservation.gite && parseLocalDate(x.dateDebut).toDateString() === menageDate.toDateString());
+                     if(arriveeLundi) heure = '07h00';
+                } else { heure = '13h00'; }
+            } else if (departDay === 6 && !arriveeMemejour) { // Samedi
+                // Vérif dimanche
+                const resaDimanche = allReservations.find(x => x.gite === reservation.gite && parseLocalDate(x.dateDebut).getTime() === (departDate.getTime() + 86400000));
+                if(!resaDimanche) {
+                    menageDate.setDate(menageDate.getDate() + 2); // Report Lundi
+                    const arriveeLundi = allReservations.find(x => x.gite === reservation.gite && parseLocalDate(x.dateDebut).toDateString() === menageDate.toDateString());
+                    if(arriveeLundi) heure = '07h00';
+                }
+            } else if (arriveeMemejour) {
+                heure = '11h00'; // Enchainement semaine
+            }
+
+            return {
+                dateObj: menageDate,
+                dateStr: dateToLocalString(menageDate),
+                heure: heure,
+                displayDate: menageDate.toLocaleDateString('fr-FR', {weekday: 'short', day: '2-digit', month: 'short'}),
+                enchainement: !!arriveeMemejour
+            };
+        }
+
         async function updateReservationsList() {
+            // S'assurer que les validations sont chargées
+            if(Object.keys(window.DB_VALIDATIONS).length === 0) await loadCleaningValidations();
+            
             const resas = await getAllReservations();
             const container = document.getElementById('planning-container');
             const active = resas.filter(r => new Date(r.dateFin) >= new Date()).sort((a,b) => new Date(a.dateDebut) - new Date(b.dateDebut));
             
             if(active.length===0) { container.innerHTML='<p style="text-align:center;color:#999">Aucune réservation</p>'; return; }
             
-            // Build Weeks
             const weeks = {};
             active.forEach(r => {
                 const d = new Date(r.dateDebut);
@@ -337,20 +383,20 @@
             });
 
             let html = '<div class="planning-weeks">';
-            // Headers Sticky
             html += `<div style="display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 100; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <div class="gite-label trevoux-label" style="margin: 0; border-radius: 0;">🏠 Trévoux</div>
                     <div class="gite-label couzon-label" style="margin: 0; border-radius: 0;">🏠 Couzon</div>
                 </div>`;
 
+            // Sort weeks alphabetically/numerically to avoid disorder
             Object.keys(weeks).sort().forEach(week => {
                 html += `<div class="week-block"><div class="week-header-unique">${week}</div>
                 <div class="week-content-grid">
                     <div class="gite-column-inline">
-                        ${weeks[week].filter(r=>r.gite==='Trévoux').map(renderResaCard).join('')}
+                        ${weeks[week].filter(r=>r.gite==='Trévoux').map(r => renderResaCard(r, active)).join('')}
                     </div>
                     <div class="gite-column-inline">
-                        ${weeks[week].filter(r=>r.gite==='Couzon').map(renderResaCard).join('')}
+                        ${weeks[week].filter(r=>r.gite==='Couzon').map(r => renderResaCard(r, active)).join('')}
                     </div>
                 </div></div>`;
             });
@@ -358,21 +404,38 @@
             container.innerHTML = html;
         }
 
-        function renderResaCard(r) {
+        function renderResaCard(r, allReservations) {
+            // Get cleaning info
+            const menage = getMenageInfo(r, allReservations);
+            // Get validation status
+            const status = window.DB_VALIDATIONS[r.id] || 'pending';
+            const statusIcon = status === 'validated' ? '✅' : '⏳';
+            const badgeClass = status === 'validated' ? 'validated' : 'pending';
+            const btnLabel = status === 'validated' ? 'Validé' : 'À faire';
+
             return `<div class="week-reservation ${r.gite==='Trévoux'?'trevoux':'couzon'}" style="position:relative;padding:12px;">
-                <div style="position:absolute;top:5px;right:5px;">
+                <div style="position:absolute;top:5px;right:5px; display:flex; gap:5px;">
                     <button onclick="openEditModal(${r.id})" style="border:none;background:none;cursor:pointer;">✏️</button>
                     <button onclick="deleteReservationById(${r.id})" style="border:none;background:none;cursor:pointer;">🗑️</button>
                 </div>
                 <div style="font-weight:bold;margin-bottom:5px;">${r.nom || 'Client Inconnu'}</div>
-                <div style="font-size:0.9rem;">${formatDate(r.dateDebut)} - ${formatDate(r.dateFin)}</div>
-                <div style="font-size:0.8rem;color:#666;">${r.montant}€ - ${r.site}</div>
+                <div style="font-size:0.9rem;">${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}</div>
+                <div style="font-size:0.8rem;color:#666;margin-bottom:8px;">${r.montant}€ - ${r.site}</div>
+                
+                <div style="border-top:1px solid #ddd; padding-top:8px; margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:0.85rem;">
+                        🧹 <strong>${menage.displayDate}</strong> à ${menage.heure}
+                        ${menage.enchainement ? '⚡' : ''}
+                    </div>
+                    <button class="btn-validation ${badgeClass}" style="padding:2px 8px; font-size:0.75rem;" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">
+                        ${btnLabel}
+                    </button>
+                </div>
             </div>`;
         }
 
-        // --- CHARGES (SCHEMA UPDATED) ---
+        // --- CHARGES ---
         async function getAllCharges() {
-            // MAPPING: date_charge -> date, description -> nom, categorie -> type
             const { data, error } = await supabase.from('charges').select('*').order('date_charge', {ascending:false});
             if(error) return [];
             return data.map(c => ({
@@ -394,9 +457,9 @@
             e.preventDefault();
             await supabase.from('charges').insert({
                 gite: document.getElementById('chargeGite').value,
-                description: document.getElementById('chargeNom').value, // Map Name to Description
+                description: document.getElementById('chargeNom').value,
                 montant: document.getElementById('chargeMontant').value,
-                categorie: document.getElementById('chargeType').value, // Map Type to Categorie
+                categorie: document.getElementById('chargeType').value,
                 date_charge: document.getElementById('chargeDate').value
             });
             e.target.reset();
@@ -406,9 +469,8 @@
             if(confirm("Supprimer?")) { await supabase.from('charges').delete().eq('id', id); updateChargesDisplay(); }
         }
 
-        // --- MENAGE (SCHEMA UPDATED to reservation_id) ---
+        // --- MENAGE LOGIC ---
         async function loadCleaningValidations() {
-            // Fetch validation using reservation_id
             const { data } = await supabase.from('cleaning_validation').select('*');
             window.DB_VALIDATIONS = {};
             if(data) data.forEach(v => window.DB_VALIDATIONS[v.reservation_id] = v.status);
@@ -417,7 +479,6 @@
         async function toggleMenageStatus(reservationId, currentStatus, dateIso, gite) {
             const newStatus = currentStatus === 'validated' ? 'pending' : 'validated';
             
-            // Upsert based on reservation_id
             const { error } = await supabase.from('cleaning_validation').upsert({
                 reservation_id: reservationId,
                 gite: gite,
@@ -427,7 +488,9 @@
 
             if(!error) {
                 window.DB_VALIDATIONS[reservationId] = newStatus;
-                genererPlanningMenage(); // Refresh UI
+                // Update BOTH views
+                updateReservationsList();
+                genererPlanningMenage();
             } else {
                 console.error(error);
                 showToast("Erreur maj ménage", "error");
@@ -443,27 +506,21 @@
             
             let html = '';
             relevant.forEach(r => {
-                const depart = new Date(r.dateFin);
-                let menageDate = new Date(depart);
-                let heure = '12h00';
-                if(depart.getDay() === 0) menageDate.setDate(menageDate.getDate()+1); // Dimanche -> Lundi
-                
-                const dateIso = dateToLocalString(menageDate);
-                // Check status using reservation ID
+                const menage = getMenageInfo(r, resas);
                 const status = window.DB_VALIDATIONS[r.id] || 'pending';
                 const btnClass = status === 'validated' ? 'btn-validation validated' : 'btn-validation pending';
                 const btnText = status === 'validated' ? '✅ FAIT' : '⏳ À FAIRE';
                 
                 html += `<div class="menage-item">
-                    <div><div class="menage-date">📅 ${menageDate.toLocaleDateString('fr-FR')} ${heure}</div>
+                    <div><div class="menage-date">📅 ${menage.displayDate} ${menage.heure}</div>
                     <div class="menage-detail">🏠 ${r.gite} - ${r.nom}</div></div>
-                    <button class="${btnClass}" onclick="toggleMenageStatus(${r.id}, '${status}', '${dateIso}', '${r.gite}')">${btnText}</button>
+                    <button class="${btnClass}" onclick="toggleMenageStatus(${r.id}, '${status}', '${menage.dateStr}', '${r.gite}')">${btnText}</button>
                 </div>`;
             });
             document.getElementById('menagePlanning').innerHTML = html;
         }
 
-        // --- ACTIVITES (EXISTING) ---
+        // --- ACTIVITES ---
         async function chargerActivites() {
              const { data, error } = await supabase.from('activites_gites').select('*');
              if(!error && data) {
@@ -487,10 +544,16 @@
             Object.keys(parCat).sort().forEach(cat => {
                 html += `<h3 style="color:var(--primary);margin-top:20px;border-bottom:1px solid #ddd">${cat}</h3>`;
                 parCat[cat].forEach(a => {
+                    const stars = a.note ? '⭐'.repeat(Math.round(a.note)) : '';
                     html += `<div style="background:#f9f9f9;padding:10px;margin-top:5px;border-left:3px solid var(--primary);">
-                        <strong>${a.nom}</strong> (${a.prix||'?'}) <br> ${a.description||''} <br> 
-                        <small>📍 ${a.distance}km | ⭐ ${a.note}/5</small>
-                        <button onclick="supprimerActivite(${a.id})" style="float:right;border:none;background:none;cursor:pointer;">🗑️</button>
+                        <div style="display:flex;justify-content:space-between;">
+                            <strong>${a.nom}</strong>
+                            <button onclick="supprimerActivite(${a.id})" style="border:none;background:none;cursor:pointer;">🗑️</button>
+                        </div>
+                        <div style="font-size:0.9rem;color:#666">${a.description||''}</div>
+                        <div style="font-size:0.85rem;color:#555;margin-top:5px;">
+                            ${a.prix || ''} | ${stars} | 📍 ${a.distance}km
+                        </div>
                     </div>`;
                 });
             });
@@ -543,7 +606,6 @@
             document.getElementById('statCA').innerText = total.toFixed(0) + ' €';
             document.getElementById('statTotal').innerText = resas.length;
             
-            // Chart CA Mensuel
             const data = Array(12).fill(0);
             resas.forEach(r => { if(new Date(r.dateDebut).getFullYear() === new Date().getFullYear()) data[new Date(r.dateDebut).getMonth()] += r.montant; });
             
@@ -556,6 +618,7 @@
         function parseLocalDate(s) { const [y,m,d]=s.split('-'); return new Date(y,m-1,d); }
         function dateToLocalString(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
         function formatDate(d) { return new Date(d).toLocaleDateString('fr-FR'); }
+        function formatDateShort(d) { return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); }
         function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7); return d.getUTCFullYear()+"-W"+weekNo; }
         
         function showToast(msg, type='success') { const t=document.getElementById('toast'); t.innerText=msg; t.style.background=type==='error'?'#E74C3C':'#27AE60'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
@@ -593,6 +656,7 @@
         async function syncAllCalendars() {}
         async function sauvegarderUrlsIcal() {}
         function filterReservations() {}
+        async function populateYearFilter() {}
 
         initApp();
     </script>
