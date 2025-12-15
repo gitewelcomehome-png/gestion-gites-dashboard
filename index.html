@@ -26,11 +26,8 @@
     .tab-content{display:none;}
     .tab-content.active{display:block;}
     .main-grid{display:grid;grid-template-columns:400px 1fr;gap:30px;margin-bottom:30px;}
-    
-    /* Grid Spécifique pour le ménage */
     .menage-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 30px;}
     @media (max-width:1000px){.menage-grid{grid-template-columns:1fr;}}
-
     .card{background:white;border-radius:20px;padding:35px;box-shadow:0 10px 40px rgba(0,0,0,0.15);}
     .card-header{display:flex;align-items:center;gap:15px;margin-bottom:25px;padding-bottom:20px;border-bottom:2px solid var(--border);}
     .card-icon{font-size:2.5rem;}
@@ -44,13 +41,12 @@
     .btn-secondary{background:linear-gradient(135deg,var(--accent) 0%,#D89968 100%);color:white;margin-top:10px;}
     .btn-sync{background:linear-gradient(135deg,#3498DB 0%,#2874A6 100%);color:white;margin-top:10px;}
     .btn-menage{background:linear-gradient(135deg,#27AE60 0%,#229954 100%);color:white;margin-top:10px;}
+    .btn-email{background:linear-gradient(135deg,#8e44ad 0%,#9b59b6 100%);color:white;}
     .btn-danger{background:linear-gradient(135deg,var(--danger) 0%,#C0392B 100%);color:white;}
-    
     .menage-item{background:#f0f8ff;padding:15px;margin-bottom:10px;border-radius:8px;border-left:4px solid #27AE60; display: flex; justify-content: space-between; align-items: center;}
     .menage-col-header {padding: 15px; border-radius: 12px; color: white; margin-bottom: 20px; text-align: center; font-family: 'Playfair Display', serif; font-size: 1.5rem;}
     .menage-col-header.trevoux {background: linear-gradient(135deg,var(--trevoux) 0%,#667eea 100%);}
     .menage-col-header.couzon {background: linear-gradient(135deg,var(--couzon) 0%,#f5576c 100%);}
-
     .charge-item{background:var(--bg-light);padding:15px;border-radius:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
     .charge-amount{font-size:1.2rem;font-weight:700;color:var(--danger);}
     .btn-small{padding:8px 15px;font-size:0.9rem;width:auto;}
@@ -78,12 +74,9 @@
     @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
     @keyframes slideUp{from{transform:translateY(50px);opacity:0;}to{transform:translateY(0);opacity:1;}}
     
-    /* Login Modal Styles */
     #loginOverlay {position: fixed; inset: 0; background: #0f172a; z-index: 10000; display: flex; justify-content: center; align-items: center;}
     .login-box {background: white; padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);}
     .login-input {width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px;}
-    
-    /* Boutons Validation */
     .btn-validation {padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 0.85rem; cursor: pointer; border: none; transition: all 0.2s;}
     .btn-validation.pending {background: #FFF3E0; color: #F57C00; border: 1px solid #F57C00;}
     .btn-validation.validated {background: #E8F5E9; color: #2E7D32; border: 1px solid #2E7D32;}
@@ -139,7 +132,12 @@
         
         <div id="tab-reservations" class="tab-content active">
             <div class="card">
-                <div class="card-header"><span class="card-icon">📅</span><h2 class="card-title">Planning</h2></div>
+                <div class="card-header">
+                    <span class="card-icon">📅</span><h2 class="card-title">Planning</h2>
+                    <div style="margin-left: auto; display: flex; gap: 10px;">
+                        <button class="btn btn-sync btn-small" onclick="syncAllCalendars()">🔄 Sync Calendriers</button>
+                    </div>
+                </div>
                 <div id="planning-container" class="planning-container"></div>
             </div>
         </div>
@@ -177,8 +175,13 @@
         
         <div id="tab-menage" class="tab-content">
             <div class="card">
-                <div class="card-header"><span class="card-icon">🧹</span><h2 class="card-title">Planning Ménage</h2></div>
-                <button class="btn btn-menage" onclick="genererPlanningMenage()"><span>🧹</span> Rafraîchir Planning</button>
+                <div class="card-header">
+                    <span class="card-icon">🧹</span><h2 class="card-title">Planning Ménage</h2>
+                    <div style="margin-left: auto; display: flex; gap: 10px;">
+                        <button class="btn btn-menage btn-small" onclick="genererPlanningMenage()">🔄 Rafraîchir</button>
+                        <button class="btn btn-email btn-small" onclick="envoyerPlanningEmail()">📧 Envoyer Planning</button>
+                    </div>
+                </div>
                 <div id="menagePlanning" style="margin-top: 30px;">
                     </div>
             </div>
@@ -324,6 +327,75 @@
             }));
         }
 
+        // --- STATISTIQUES (FIXED) ---
+        async function updateStats() {
+            // 1. LIVE DATA
+            const resas = await getAllReservations();
+            let total = 0; 
+            resas.forEach(r => total+= (parseFloat(r.montant)||0));
+            document.getElementById('statCA').innerText = total.toFixed(0) + ' €';
+            document.getElementById('statTotal').innerText = resas.length;
+            
+            const currentYear = new Date().getFullYear();
+            const liveData = Array(12).fill(0);
+            resas.forEach(r => { 
+                if(r.dateDebut) {
+                    const d = new Date(r.dateDebut);
+                    if(d.getFullYear() === currentYear) liveData[d.getMonth()] += (parseFloat(r.montant) || 0);
+                }
+            });
+
+            // 2. HISTORICAL DATA
+            const { data: history } = await supabase.from('historical_data').select('*');
+            
+            // 3. BUILD DATASETS
+            const datasets = [];
+            // Add current year
+            datasets.push({
+                label: `Courant (${currentYear})`,
+                data: liveData,
+                backgroundColor: '#3498DB',
+                borderColor: '#2980B9',
+                borderWidth: 1
+            });
+
+            // Add history
+            if(history) {
+                const colors = ['#95a5a6', '#e67e22', '#2ecc71'];
+                const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+                history.forEach((h, idx) => {
+                    // Try to handle different json formats
+                    let hData = Array(12).fill(0);
+                    if(h.months && !Array.isArray(h.months)) {
+                        hData = monthKeys.map(k => h.months[k] || 0);
+                    } else if (Array.isArray(h.months)) {
+                        hData = h.months;
+                    }
+                    
+                    datasets.push({
+                        label: h.year,
+                        data: hData,
+                        backgroundColor: 'rgba(200,200,200,0.2)',
+                        borderColor: colors[idx % colors.length] || '#ccc',
+                        borderWidth: 2,
+                        type: 'line'
+                    });
+                });
+            }
+            
+            const ctx = document.getElementById('caChart');
+            if(caChartInstance) caChartInstance.destroy();
+            caChartInstance = new Chart(ctx, { 
+                type: 'bar', 
+                data: { 
+                    labels: ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'], 
+                    datasets: datasets 
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // --- CALCUL DATE MÉNAGE ---
         function getMenageInfo(reservation, allReservations) {
             const departDate = parseLocalDate(reservation.dateFin);
             let menageDate = new Date(departDate);
@@ -475,7 +547,7 @@
                 genererPlanningMenage();
             } else {
                 console.error(error);
-                showToast("Erreur maj ménage", "error");
+                showToast("Erreur. AVEZ-VOUS LANCE LE SQL ?", "error");
             }
         }
 
@@ -486,7 +558,6 @@
             const today = new Date();
             today.setHours(0,0,0,0);
             
-            // On ne garde que les réservations dont la date de MÉNAGE (approx dateFin) est >= aujourd'hui
             const relevant = resas.filter(r => new Date(r.dateFin) >= today);
             relevant.sort((a,b) => new Date(a.dateFin) - new Date(b.dateFin));
             
@@ -514,17 +585,34 @@
 
             let html = `
                 <div class="menage-grid">
-                    <div>
-                        <div class="menage-col-header trevoux">🏰 Trévoux</div>
-                        ${renderColumn(trevoux)}
-                    </div>
-                    <div>
-                        <div class="menage-col-header couzon">⛰️ Couzon</div>
-                        ${renderColumn(couzon)}
-                    </div>
+                    <div><div class="menage-col-header trevoux">🏰 Trévoux</div>${renderColumn(trevoux)}</div>
+                    <div><div class="menage-col-header couzon">⛰️ Couzon</div>${renderColumn(couzon)}</div>
                 </div>
             `;
             document.getElementById('menagePlanning').innerHTML = html;
+        }
+
+        function envoyerPlanningEmail() {
+            const items = document.querySelectorAll('.menage-item');
+            if(items.length === 0) return showToast("Rien à envoyer", "error");
+            
+            // Construire le corps du mail
+            let body = "Bonjour,\n\nVoici le planning des prochains ménages :\n\n";
+            
+            // On récupère le texte directement depuis le DOM généré
+            items.forEach(item => {
+                const date = item.querySelector('.menage-date').innerText;
+                const detail = item.querySelector('.menage-detail').innerText;
+                // On détermine le gîte en remontant au parent
+                const colHeader = item.parentElement.querySelector('.menage-col-header') || item.closest('div').parentElement.querySelector('.menage-col-header');
+                const gite = colHeader ? colHeader.innerText : "Gîte";
+                
+                body += `[${gite}] ${date} - ${detail}\n`;
+            });
+            
+            body += "\nMerci !";
+            const subject = "Planning Ménage Gîtes";
+            window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
 
         // --- ACTIVITES ---
@@ -602,29 +690,6 @@
             document.querySelectorAll('[id^="infos_"]').forEach(el => data[el.id.replace('infos_','')] = el.value);
             await supabase.from('infos_gites').upsert({ gite_nom: window.currentGiteInfos, data: data }, {onConflict:'gite_nom'});
             showToast("Infos sauvegardées");
-        }
-
-        // --- STATS & CHARTS ---
-        async function updateStats() {
-            const resas = await getAllReservations();
-            let total = 0; resas.forEach(r => total+= (r.montant||0));
-            document.getElementById('statCA').innerText = total.toFixed(0) + ' €';
-            document.getElementById('statTotal').innerText = resas.length;
-            
-            // Chart CA Mensuel
-            const data = Array(12).fill(0);
-            resas.forEach(r => { 
-                if(r.dateDebut) {
-                    const d = new Date(r.dateDebut);
-                    if(d.getFullYear() === new Date().getFullYear()) {
-                        data[d.getMonth()] += (r.montant || 0);
-                    }
-                }
-            });
-            
-            const ctx = document.getElementById('caChart');
-            if(caChartInstance) caChartInstance.destroy();
-            caChartInstance = new Chart(ctx, { type: 'bar', data: { labels: ['J','F','M','A','M','J','J','A','S','O','N','D'], datasets: [{label:'CA', data: data, backgroundColor:'#3498DB'}] } });
         }
 
         // --- UTILS ---
